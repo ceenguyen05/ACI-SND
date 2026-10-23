@@ -1,0 +1,29 @@
+{
+ "map": "aci_hq",
+ "version": 3,
+ "hash": "c8697490",
+ "range": 3,
+ "atlas": {
+  "width": 2048,
+  "height": 448,
+  "file": "aci_hq_atlas.png"
+ },
+ "probes": {
+  "nx": 120,
+  "nz": 80,
+  "ny": 7,
+  "x0": -59.5,
+  "z0": -39.5,
+  "spacing": 1,
+  "levels": [
+   0.3,
+   1.1,
+   1.9,
+   2.8,
+   4.5,
+   6.5,
+   8.5
+  ],
+  "file": "aci_hq_probes.png"
+ }
+}

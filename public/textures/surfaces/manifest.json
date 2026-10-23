@@ -1,0 +1,77 @@
+[
+  {
+    "id": "concrete_floor",
+    "source": "https://polyhaven.com/a/concrete_floor",
+    "license": "CC0-1.0",
+    "files": [
+      {
+        "file": "concrete_floor_diff_1k.jpg",
+        "bytes": 927975,
+        "md5": "99b94da291a4f038fa6af93c3993cbec",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_diff_1k.jpg"
+      },
+      {
+        "file": "concrete_floor_nor_gl_1k.jpg",
+        "bytes": 883889,
+        "md5": "d77c5c5de3f58adcb00f93caeb4c5a73",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_nor_gl_1k.jpg"
+      },
+      {
+        "file": "concrete_floor_rough_1k.jpg",
+        "bytes": 503981,
+        "md5": "5d9bd1bfd18e5d32a3217e8275dd8271",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_rough_1k.jpg"
+      }
+    ]
+  },
+  {
+    "id": "corrugated_iron",
+    "source": "https://polyhaven.com/a/corrugated_iron",
+    "license": "CC0-1.0",
+    "files": [
+      {
+        "file": "corrugated_iron_diff_1k.jpg",
+        "bytes": 719557,
+        "md5": "fabb629c5ad6f427e6862bb4043564bd",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron/corrugated_iron_diff_1k.jpg"
+      },
+      {
+        "file": "corrugated_iron_nor_gl_1k.jpg",
+        "bytes": 755185,
+        "md5": "02249d61a2b1839552938f35a20d075a",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron/corrugated_iron_nor_gl_1k.jpg"
+      },
+      {
+        "file": "corrugated_iron_rough_1k.jpg",
+        "bytes": 455677,
+        "md5": "7c14b728587586e74be45a67cfe44160",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/corrugated_iron/corrugated_iron_rough_1k.jpg"
+      }
+    ]
+  },
+  {
+    "id": "red_brick_03",
+    "source": "https://polyhaven.com/a/red_brick_03",
+    "license": "CC0-1.0",
+    "files": [
+      {
+        "file": "red_brick_03_diff_1k.jpg",
+        "bytes": 694500,
+        "md5": "d157c6d6dd774762b4269927a87fe9b5",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/red_brick_03/red_brick_03_diff_1k.jpg"
+      },
+      {
+        "file": "red_brick_03_nor_gl_1k.jpg",
+        "bytes": 955430,
+        "md5": "e89ce432d9160edb7c902f901756865f",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/red_brick_03/red_brick_03_nor_gl_1k.jpg"
+      },
+      {
+        "file": "red_brick_03_rough_1k.jpg",
+        "bytes": 286623,
+        "md5": "8f16439361c5fe27f9df03be279ce8c9",
+        "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/red_brick_03/red_brick_03_rough_1k.jpg"
+      }
+    ]
+  }
+]
