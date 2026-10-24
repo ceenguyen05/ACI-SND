@@ -4,7 +4,7 @@
 // accelerated all-bot match (?autotest=1) until rounds complete. Fails on any console error.
 // Screenshots are written to ./screenshots.
 import { preview, build } from 'vite';
-import { chromium } from 'playwright';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots';
@@ -17,11 +17,7 @@ const server = await preview({ preview: { port: 4173, strictPort: false }, logLe
 const url = server.resolvedUrls.local[0];
 console.log('serving', url);
 
-const browser = await chromium.launch({
-  args: process.argv.includes('--swiftshader')
-    ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required']
-    : ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
-});
+const browser = await launchBrowser();
 const errors = [];
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

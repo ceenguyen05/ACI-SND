@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in the game is broken or behaves wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a 5v5 match as Defenders
+        2. Buy a Sentinel M4 with a suppressor
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Movement, Shooting / weapons, Gunsmith / buy menu, Gadgets / utilities, Killstreaks, Bots, HUD / menus, Graphics / performance, Audio, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Build
+      description: Open <site>/version.json and paste the commit, or say "local".
+  - type: input
+    id: browser
+    attributes:
+      label: Browser, OS and GPU
+      placeholder: Chrome 140, Windows 11, Intel UHD 620
+  - type: dropdown
+    id: quality
+    attributes:
+      label: Graphics quality
+      options: [Low, Medium, High]
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots / console errors
+      description: F12 → Console. Paste any red errors.

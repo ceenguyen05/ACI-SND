@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Play the latest build
+    url: https://ceenguyen05.github.io/ACI-SND/
+    about: The current main branch, deployed by GitHub Actions.
+  - name: Deployment & CI guide
+    url: https://github.com/ceenguyen05/ACI-SND/blob/main/docs/DEPLOYMENT.md
+    about: How the build, checks and GitHub Pages deploy work.

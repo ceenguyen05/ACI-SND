@@ -1,5 +1,11 @@
 # ACI: Search & Destroy
 
+[![CI](https://github.com/ceenguyen05/ACI-SND/actions/workflows/ci.yml/badge.svg)](https://github.com/ceenguyen05/ACI-SND/actions/workflows/ci.yml)
+[![Deploy](https://github.com/ceenguyen05/ACI-SND/actions/workflows/deploy.yml/badge.svg)](https://github.com/ceenguyen05/ACI-SND/actions/workflows/deploy.yml)
+
+**▶ Play in the browser: https://ceenguyen05.github.io/ACI-SND/** (the latest `main`, deployed
+automatically)
+
 A tactical first-person shooter in the style of CS:GO / CS2, playing **Search & Destroy (bomb
 defusal)** on one original map: **ACI HQ**. ACI HQ is a single-story building where the west
 half is offices (meeting rooms, engineering cubicles, B-site bullpen) and the east half is
@@ -16,13 +22,15 @@ Version 1 is **offline, you vs. bots**, in teams of 1v1 up to 5v5.
 | Map layout and callouts | [docs/MAP.md](docs/MAP.md) |
 | Movement and visual overhaul | [docs/POLISH.md](docs/POLISH.md) |
 | Art sources and licenses | [docs/ASSETS.md](docs/ASSETS.md) |
+| CI, GitHub Pages deploys and rollback | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| How to contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ---
 
 ## Quick start
 
 **Requirements:**
-* **Node.js 20.19+ or 22.12+.** This machine has 22.20.0.
+* **Node.js 20.19+ or 22.12+.** This machine has 22.20.0; CI uses Node 22 (`.nvmrc`).
 * **npm.** This machine has 10.9.3.
 * A WebGL2 browser: Chrome, Edge or Firefox.
 
@@ -42,6 +50,9 @@ To build a production version to host anywhere:
 npm run build        # outputs static files to dist/
 npm run preview      # serves dist/ locally
 ```
+
+You don't need to host it yourself: every push to `main` is checked and published to GitHub
+Pages (see [Deployment](#deployment)).
 
 ## Controls (all rebindable in Settings → Controls)
 
@@ -215,6 +226,10 @@ never applies to bots.
 
 ```
 ACI-SND/
+├─ .github/
+│  ├─ workflows/ci.yml     # typecheck, tests, build, browser boot check (every push / PR)
+│  ├─ workflows/deploy.yml # CI, then publish to GitHub Pages (push to main)
+│  └─ ISSUE_TEMPLATE/, pull_request_template.md, dependabot.yml, CODEOWNERS
 ├─ index.html              # page shell (canvas + UI root)
 ├─ src/
 │  ├─ main.ts              # bootstrap + loading screen
@@ -244,7 +259,7 @@ ACI-SND/
 │  │  ├─ combat/           #   damage model, spray patterns, ballistics + penetration, weapon state machine,
 │  │  │                    #   Ordnance (rockets, 40 mm shells, stim darts), Explosion
 │  │  ├─ utility/          #   grenade physics, smoke/fire/flash/decoy/pulse effects
-│  ├─ gadget/           #   drones, cameras, CCTV, trip mines, wire, shields, EMP
+│  │  ├─ gadget/           #   drones, cameras, CCTV, trip mines, wire, shields, EMP
 │  │  ├─ ai/               #   NavGrid + A*, BotController, TeamCoach, BotBuy
 │  │  ├─ mode/             #   Match (S&D rules, rounds, bomb, economy), Economy, Killstreaks, types
 │  │  ├─ events.ts         #   simulation event types (consumed by render/audio/UI)
@@ -270,6 +285,8 @@ ACI-SND/
 │     └─ styles/main.css
 ├─ tests/                  # Vitest: map validity, physics, combat, economy, full bot matches
 ├─ scripts/
+│  ├─ boot-check.mjs       # CI: boots the build from /ACI-SND/ like GitHub Pages
+│  ├─ lib/browser.mjs      # shared Chromium launch (GPU locally, SwiftShader on CI)
 │  ├─ smoke-test.mjs       # headless Chromium end-to-end test + screenshots
 │  ├─ bake-lighting.mjs    # offline lightmap + probe baker (npm run bake)
 │  ├─ look.mjs             # quick in-game views at one quality preset
@@ -290,6 +307,8 @@ multiplayer server unchanged.
 
 | Command | What it does |
 |---|---|
+| `npm run check` | Typecheck + tests + production build: exactly what CI runs on every push |
+| `npm run check:boot` | Serves the build from `/ACI-SND/` (like GitHub Pages), boots it in headless Chromium, starts a match and fails on any missing file or error. Runs in CI; needs a build first |
 | `npm run typecheck` | Strict TypeScript checks |
 | `npm test` | 130 unit and simulation tests (plus an optional balance report), including prone and slide (clearance, hitboxes, crouch modes), Gunsmith attachments, rebuy/auto-buy, mantling, coyote time, burst fire, stun, throwing knives, the heartbeat sensor, pings and killcam recording, including movement (crouch-jump, stamina), wallbangs, foot placement, weapon handling, input buffering, aim assist, every gadget, the stim pistol, barricades, launchers, C4 and killstreaks. They cover map connectivity, prop/wall overlap, raycasts, damage/armor, spray patterns, economy, and **complete bot-vs-bot matches** (rounds, plants, halftime swap, money limits) |
 | `npm run smoke` | Builds, serves, and drives the real game in headless Chromium: title → every menu page → start match → buy menu purchase → quality presets with FPS readout → an accelerated all-bot match until it ends. Fails on any console error and saves screenshots to `screenshots/` |
@@ -305,10 +324,24 @@ multiplayer server unchanged.
 | `node scripts/gunsmith-look.mjs` | Buys and fits attachments through the real buy menu, then screenshots the Gunsmith tab, a kitted rifle, red-dot / holo / ACOG aiming, an enemy laser and an enemy light (`screenshots/gunsmith/`) |
 | `node scripts/moments-look.mjs` | Screenshots of the new guns, gear, heartbeat screen, pings, stun, multi-kill banner and the killcam, then checks the next round starts (`screenshots/moments/`) |
 | `npm run balance [difficulty] [seeds]` | Win-rate and kill statistics over ~60 simulated rounds |
-| `npm run verify` | Typecheck + tests + smoke test |
+| `npm run verify` | Full pre-release pass: `check` + `check:boot` + smoke test + real-key check (needs a GPU) |
 
 `npx playwright install chromium` downloads the headless browser that the smoke test uses. It
-is already installed on this machine.
+is already installed on this machine. Add `--swiftshader` to any browser script to use
+software rendering like CI does.
+
+## Deployment
+
+GitHub Actions runs on every push and pull request and publishes `main` to GitHub Pages:
+
+| Event | What runs |
+|---|---|
+| Push to any other branch / open a PR | **CI**: typecheck, tests, build, then a browser boot check of the build |
+| Push to `main` (or Actions → *Deploy to GitHub Pages* → Run workflow) | **CI**, then the tested build is published to https://ceenguyen05.github.io/ACI-SND/ |
+
+A failing check stops the deploy, so the live site keeps the last good version.
+`/version.json` on the site shows which commit is live. The one-time Pages setting, rollback,
+custom domains and troubleshooting are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Performance
 

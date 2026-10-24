@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "ACI: Search & Destroy - a CS-style tactical shooter on a single office/factory map, built with Three.js",
+  "homepage": "https://ceenguyen05.github.io/ACI-SND/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ceenguyen05/ACI-SND.git"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --open",
@@ -11,11 +19,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "npm run typecheck && npm test && vite build",
+    "check:boot": "node scripts/boot-check.mjs --no-build",
     "smoke": "node scripts/smoke-test.mjs",
     "screenshots": "node scripts/screenshots.mjs",
     "balance": "node scripts/balance.mjs",
     "map:ascii": "node scripts/print-map.mjs",
-    "verify": "npm run typecheck && npm test && npm run smoke",
+    "verify": "npm run check && npm run check:boot && node scripts/smoke-test.mjs --no-build && node scripts/keys-check.mjs --no-build",
     "perf": "node scripts/perf.mjs",
     "test:handling": "node scripts/handling-check.mjs",
     "test:keys": "node scripts/keys-check.mjs",

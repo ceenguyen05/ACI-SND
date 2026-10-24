@@ -2,11 +2,11 @@
 // V quick melee, H self-stim, 7 killstreak, Z detonate C4, T cameras, and the stim dart.
 //   node scripts/keys-check.mjs [--no-build]
 import { preview, build } from 'vite';
-import { chromium } from 'playwright';
+import { launchBrowser } from './lib/browser.mjs';
 
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4179 }, logLevel: 'warn' });
-const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));

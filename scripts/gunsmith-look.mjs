@@ -1,14 +1,14 @@
 // Visual check of the Gunsmith: buy-menu tab, fitted guns in first person, optics, laser and light.
 //   node scripts/gunsmith-look.mjs [--no-build]
 import { preview, build } from 'vite';
-import { chromium } from 'playwright';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots/gunsmith';
 mkdirSync(OUT, { recursive: true });
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4181 }, logLevel: 'warn' });
-const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));

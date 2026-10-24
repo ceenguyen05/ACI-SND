@@ -1,7 +1,7 @@
 // Visual review helper: tours the map and the weapon view-models and saves screenshots.
 //   node scripts/screenshots.mjs [--no-build]
 import { preview, build } from 'vite';
-import { chromium } from 'playwright';
+import { launchBrowser } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots/tour';
@@ -9,7 +9,7 @@ mkdirSync(OUT, { recursive: true });
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4174 }, logLevel: 'warn' });
 const url = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));

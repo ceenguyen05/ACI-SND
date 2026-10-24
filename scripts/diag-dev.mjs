@@ -1,9 +1,9 @@
 // Diagnostic against the unminified dev server (readable stacks).  node scripts/diag-dev.mjs
 import { createServer } from 'vite';
-import { chromium } from 'playwright';
+import { launchBrowser } from './lib/browser.mjs';
 const server = await createServer({ server: { port: 5299 }, logLevel: 'error' });
 await server.listen();
-const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const seen = new Set();
 page.on('pageerror', (e) => console.log('PAGEERROR', e.stack || e));

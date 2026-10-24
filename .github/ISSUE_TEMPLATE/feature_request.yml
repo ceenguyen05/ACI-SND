@@ -1,0 +1,21 @@
+name: Feature / idea
+description: A gun, gadget, mechanic, map change or quality-of-life idea
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should be added or changed?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it makes Search & Destroy better
+      description: Who benefits and in which situation (attacking, defending, buying, clutching...)?
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference games
+      description: How does CS2, Call of Duty, Siege or Operation One handle it? Links welcome.

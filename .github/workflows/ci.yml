@@ -1,0 +1,117 @@
+# Continuous integration: runs on every push (except main), on every pull request, and is
+# reused by deploy.yml as the gate in front of every GitHub Pages deploy.
+#
+#   checks  – install, typecheck, unit + simulation tests, production build (→ "dist" artifact)
+#   boot    – serves that exact build from /<repo>/ like GitHub Pages and boots the game in
+#             headless Chromium (software WebGL): no 404s, no console errors, a match runs.
+#
+# Interactive browser checks that need a real GPU (smoke, keys, handling, visual) are run
+# locally before a release – see docs/DEPLOYMENT.md.
+name: CI
+
+on:
+  push:
+    branches-ignore: [main] # main is covered by deploy.yml (same checks, then deploy)
+    paths-ignore: ['**/*.md', 'docs/**', '.github/ISSUE_TEMPLATE/**', '.github/pull_request_template.md']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+  FORCE_COLOR: '1'
+
+jobs:
+  checks:
+    name: Typecheck, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and simulation tests
+        run: npm test
+
+      - name: Production build
+        run: |
+          npx vite build
+          # build stamp, served at <site>/version.json
+          printf '{"commit":"%s","ref":"%s","builtAt":"%s","run":"%s"}\n' \
+            "$GITHUB_SHA" "$GITHUB_REF_NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > dist/version.json
+          du -sh dist
+
+      - name: Upload build
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+          if-no-files-found: error
+
+  boot:
+    name: Browser boot check
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Download build
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Boot the built game from the Pages sub-path
+        run: npm run check:boot
+
+      - name: Upload boot screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: boot-screenshots
+          path: screenshots/boot
+          retention-days: 7
+          if-no-files-found: ignore
