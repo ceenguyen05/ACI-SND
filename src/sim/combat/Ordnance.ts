@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { Team } from '../../config/rules';
-import { WEAPONS, type WeaponId } from '../../config/weapons';
+import { WEAPONS, type WeaponDef, type WeaponId } from '../../config/weapons';
 import { GADGET_TUNING as G } from '../../config/gadgets';
 import { MAX_GRENADES, UTILITIES, UTILITY_TUNING as U } from '../../config/utilities';
 import { DEG, dirFromAngles } from '../../core/math';
@@ -9,7 +9,7 @@ import type { SimContext } from '../SimContext';
 import { traceBullet } from './Ballistics';
 import { explode } from './Explosion';
 
-export type ShotKind = 'rocket' | 'grenade' | 'stim' | 'knife';
+export type ShotKind = 'rocket' | 'grenade' | 'plasma' | 'stim' | 'knife';
 
 export interface Shot {
   id: number;
@@ -22,6 +22,8 @@ export interface Shot {
   born: number;
   travelled: number;
   bounces: number;
+  /** Launcher ballistics captured at fire time (upgraded weapons hit harder). */
+  proj?: NonNullable<WeaponDef['projectile']>;
 }
 
 let NEXT = 1;
@@ -50,13 +52,15 @@ export class OrdnanceManager {
   }
 
   /** Fire a launcher. Spread from movement / jumping is applied to the launch direction. */
-  fireLauncher(a: Agent, weaponId: WeaponId, spread: number) {
-    const def = WEAPONS[weaponId];
+  fireLauncher(a: Agent, weapon: WeaponId | WeaponDef, spread: number) {
+    const def = typeof weapon === 'string' ? WEAPONS[weapon] : weapon;
+    const weaponId = def.id;
     const p = def.projectile!;
     const rng = this.ctx.rng;
     const ang = rng.next() * Math.PI * 2, r = rng.next() * spread;
     const d = dirFromAngles(a.yaw + (a.aimPunchYaw + a.flinchYaw) * DEG + Math.cos(ang) * r, a.pitch + (a.aimPunchPitch + a.flinchPitch) * DEG + Math.sin(ang) * r, new Vector3());
     this.spawn(a, p.kind, weaponId, d, p.speed);
+    this.shots[this.shots.length - 1].proj = p;
   }
 
   fireStim(a: Agent) {
@@ -78,7 +82,7 @@ export class OrdnanceManager {
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
       const owner = ctx.agents.find((x) => x.id === s.ownerId) ?? null;
-      const gravity = s.kind === 'rocket' ? WEAPONS.hammer.projectile!.gravity : s.kind === 'knife' ? U.knifeGravity : 9.8;
+      const gravity = s.proj ? s.proj.gravity : s.kind === 'knife' ? U.knifeGravity : 9.8;
       let done = now - s.born > 7;
       const sub = 3, h = dt / sub;
       for (let k = 0; k < sub && !done; k++) {
@@ -148,9 +152,9 @@ export class OrdnanceManager {
       ctx.events.emit('impact', { point: s.pos.clone(), normal: normal ?? dir.clone().negate(), surface: 'metal' });
       return true;
     }
-    const def = WEAPONS[s.weapon as WeaponId].projectile!;
+    const def = s.proj ?? WEAPONS[s.weapon as WeaponId].projectile!;
     const armed = s.travelled >= def.armDistance && s.bounces === 0; // a shell that bounced before arming is a dud
-    if (armed || s.kind === 'rocket') {
+    if (armed || s.kind === 'rocket' || s.kind === 'plasma') {
       if (!armed) {
         // too close to arm: a rocket thuds in as a dud
         if (agent) ctx.applyDamage(agent, owner, { health: 45, armor: 0 }, 'chest', s.weapon, s.pos.clone(), dir.clone());

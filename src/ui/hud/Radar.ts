@@ -94,6 +94,18 @@ export class Radar {
       g.fillStyle = d.kind === 'mine' ? '#ffcc30' : d.kind === 'shield' || d.kind === 'wire' ? '#c8ccd4' : d.jammedUntil > now ? '#555' : '#30d0ff';
       g.fillRect(px - s, pz - s, s * 2, s * 2);
     }
+    // Zombies: the Mystery Box and power-ups
+    const zm = m as unknown as { box?: { pos: { x: number; z: number }; state: string }; powerUps?: { pos: { x: number; z: number }; kind: string }[] };
+    if (zm.box) {
+      const [px, pz] = P(zm.box.pos.x, zm.box.pos.z);
+      g.fillStyle = '#5ad8ff'; g.font = `bold ${16 / scale * 2}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('?', px, pz);
+    }
+    for (const pu of zm.powerUps ?? []) {
+      const [px, pz] = P(pu.pos.x, pu.pos.z), s = 4 / scale * 2;
+      g.fillStyle = '#7dff6a';
+      g.beginPath(); g.moveTo(px, pz - s); g.lineTo(px + s, pz); g.lineTo(px, pz + s); g.lineTo(px - s, pz); g.closePath(); g.fill();
+    }
     // decoys look like enemies to the other team
     for (const d of m.utility.decoys) if (team && d.team !== team) dot(d.pos.x, d.pos.z, '#ff3a3a');
     // agents

@@ -1,4 +1,7 @@
-# Game Design — ACI: Search & Destroy
+# Game Design — ACI: Series 1 · Search & Destroy
+
+> ACI: Series 1 has two modes. This document covers **Search & Destroy**; the round-based co-op
+> survival mode is documented in [ZOMBIES.md](ZOMBIES.md).
 
 ## Core loop
 

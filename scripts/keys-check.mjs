@@ -2,7 +2,7 @@
 // V quick melee, H self-stim, 7 killstreak, Z detonate C4, T cameras, and the stim dart.
 //   node scripts/keys-check.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4179 }, logLevel: 'warn' });
@@ -14,8 +14,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 await page.evaluate(() => {
   const { match, session } = window.__aci;

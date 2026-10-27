@@ -73,8 +73,11 @@ export class HUD {
   private fpsAcc = 0; private fpsFrames = 0;
   private unsub: (() => void)[] = [];
   private lastXhairKey = '';
+  /** Zombies mode: the S&D widgets (score, timer, money, kill feed, bomb markers) are hidden. */
+  readonly zombies: boolean;
 
   constructor(private match: Match, private getSettings: () => Settings, private viewer: () => Agent | null) {
+    this.zombies = 'zombiePool' in match;
     const stat = (ico: string) => { const num = h('span', { class: 'num' }, '100'); return { box: h('div', { class: 'hud-stat' }, h('span', { class: 'ico' }, ico), num), num }; };
     const hp = stat('✚'), ar = stat('⛊');
     this.hp = hp.num; this.hpBox = hp.box; this.ar = ar.num;
@@ -148,6 +151,7 @@ export class HUD {
       this.fps = h('div', { class: 'fps' }),
     );
     this.dmgInd.style.opacity = '0';
+    this.el.classList.toggle('mode-zombies', this.zombies);
     this.wire();
   }
 
@@ -155,6 +159,7 @@ export class HUD {
     const ev = this.match.events;
     const me = () => this.match.player;
     this.unsub.push(ev.on('kill', (e) => {
+      if (this.zombies) return;
       const k = this.match.getAgent(e.killerId), v = this.match.getAgent(e.victimId), a = this.match.getAgent(e.assisterId);
       const col = (x: Agent | null) => (x ? (x.team === 'T' ? 'var(--t)' : 'var(--ct)') : '#ccc');
       const mine = !!me() && (e.killerId === me()!.id || e.victimId === me()!.id);
@@ -327,7 +332,7 @@ export class HUD {
     // player stats
     const a = v;
     let stance = '';
-    if (a?.alive && a.operating === null && !this.view?.killcam) {
+    if (a?.alive && a.operating === null && !this.view?.killcam && !a.zp?.downed) {
       const C = keyLabel(s.bindings.crouch), toggle = s.crouchMode === 'toggle';
       if (a.sliding) stance = 'SLIDING';
       else if (a.prone) stance = !a.cmd.prone ? 'PRONE · Move clear to stand'
@@ -340,8 +345,8 @@ export class HUD {
     this.stance.classList.toggle('hidden', !stance);
     if (a) {
       setText(this.hp, String(Math.max(0, Math.ceil(a.health))));
-      this.hpBox.classList.toggle('low', a.health <= 25);
-      this.hpBox.classList.toggle('healing', a.alive && a.heals.length > 0 && a.health < 100);
+      this.hpBox.classList.toggle('low', a.health <= 25 || !!a.zp?.downed);
+      this.hpBox.classList.toggle('healing', a.alive && a.heals.length > 0 && a.health < a.maxHealth);
       setText(this.ar, String(Math.ceil(a.armor)));
       setText(this.helm, a.helmet ? '⛑' : '');
       setText(this.moneyEl, money(a.money));
@@ -355,7 +360,8 @@ export class HUD {
         setText(this.wname, a.active === 'grenade' && a.activeGrenade ? utilityName(a.activeGrenade, a.team) : a.active === 'bomb' ? 'Bomb' : w?.def.name ?? '');
       }
       this.renderSlots(a);
-      setText(this.location, m.world.calloutAt(a.pos.x, a.pos.z).toUpperCase());
+      const area = (m as unknown as { areaName?: (x: number, z: number) => string }).areaName;
+      setText(this.location, (area ? area.call(m, a.pos.x, a.pos.z) : m.world.calloutAt(a.pos.x, a.pos.z)).toUpperCase());
       const canBuy = me === a && m.canBuyNow(a);
       setText(this.buyzone, canBuy ? `BUY ZONE · ${Math.ceil(m.buyTimeLeft())}s` : '');
     }
@@ -386,8 +392,8 @@ export class HUD {
       else if (bar && bar.team !== me.team) hint = me.hasCrowbar ? `Hold ${keyLabel(s.bindings.use)} to pry off the ${bar.kind === 'steelBarricade' ? 'steel barricade' : 'barricade'}`
         : bar.kind === 'steelBarricade' ? 'Steel barricade — needs a crowbar or explosives' : `Melee (${keyLabel(s.bindings.quickMelee)}) or shoot to break the barricade`;
       else if (bar && me.hasCrowbar) hint = `Hold ${keyLabel(s.bindings.use)} to remove your team's barricade`;
-      else if (m.gadgets.ammoBoxNear(me)) hint = `Press ${keyLabel(s.bindings.use)} to resupply ammo`;
-      else if (m.items.some((i) => i.pos.distanceTo(me.pos) < 1.8)) hint = `Look at a weapon and press ${keyLabel(s.bindings.use)} to pick it up`;
+      else if (!this.zombies && m.gadgets.ammoBoxNear(me)) hint = `Press ${keyLabel(s.bindings.use)} to resupply ammo`;
+      else if (!this.zombies && m.items.some((i) => i.pos.distanceTo(me.pos) < 1.8)) hint = `Look at a weapon and press ${keyLabel(s.bindings.use)} to pick it up`;
     }
     this.progress.classList.toggle('hidden', !prog);
     if (prog) { setText(this.progLabel, prog.label); this.progBar.style.width = `${Math.round(clamp(prog.p, 0, 1) * 100)}%`; }
@@ -479,7 +485,7 @@ export class HUD {
 
     // moments
     if (nowMs > this.momentUntil) this.moment.classList.add('hidden');
-    if (me && me.alive && this.clutchRound !== m.round && (m.phase === 'live' || m.phase === 'planted')) {
+    if (!this.zombies && me && me.alive && this.clutchRound !== m.round && (m.phase === 'live' || m.phase === 'planted')) {
       const mates = m.agents.filter((x) => x.alive && x.team === me.team).length;
       const foes = m.agents.filter((x) => x.alive && x.team !== me.team).length;
       if (mates === 1 && foes >= 1 && m.agents.filter((x) => x.team === me.team).length > 1) {
@@ -492,7 +498,7 @@ export class HUD {
     // stun + low health
     const stun = a && a.alive ? a.stunAt(now) : 0;
     this.stunOv.style.opacity = String(stun);
-    const low = a && a.alive && a === me && a.health <= 25 && m.phase !== 'freeze';
+    const low = a && a.alive && a === me && a.health <= 25 && m.phase !== 'freeze' && !a.zp?.downed;
     this.lowHpOv.style.opacity = low ? String(0.55 + 0.25 * Math.sin(nowMs / 160)) : '0';
     if (low) { this.lowHpBeat -= dt; if (this.lowHpBeat <= 0) { this.lowHpBeat = 0.85; sfx.lowHealth(); } } else this.lowHpBeat = 0;
 
@@ -697,6 +703,7 @@ export class HUD {
     if (a.activeWeapon()?.def.mods?.light) rows.push([keyLabel(b.light), a.lightOn ? 'Light ON' : 'Light off', a.lightOn]);
     if (a.hasBomb) rows.push([keyLabel(b.bomb), 'Bomb', a.active === 'bomb']);
     if (a.hasKit) rows.push(['', 'Defuse Kit', false]);
+    if (a.zp?.reviveKit) rows.push(['', 'Self-Revive Kit', false]);
     const key = rows.map((r) => r.join('|')).join(';');
     if (this.slots.dataset.k === key) return;
     this.slots.dataset.k = key;

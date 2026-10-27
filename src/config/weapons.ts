@@ -5,11 +5,12 @@ export type WeaponId =
   | 'k9' | 'warden' | 'p30' | 'judge' | 'viper'
   | 'vespa' | 'hornet' | 'mako' | 'breacher' | 'reaper'
   | 'galeforce' | 'tempest' | 'ravager' | 'sentinel' | 'talon' | 'kestrel' | 'marshal' | 'longbow'
-  | 'bulwark' | 'anvil' | 'thumper' | 'hammer';
+  | 'bulwark' | 'anvil' | 'thumper' | 'hammer'
+  | 'disruptor';
 
 export type WeaponSlot = 'primary' | 'secondary' | 'melee';
 export type WeaponClass = 'knife' | 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'lmg' | 'sniper' | 'launcher';
-export type SoundProfile = 'pistol' | 'heavyPistol' | 'suppressed' | 'smg' | 'rifle' | 'heavyRifle' | 'sniper' | 'shotgun' | 'knife' | 'launcher' | 'rocket';
+export type SoundProfile = 'pistol' | 'heavyPistol' | 'suppressed' | 'smg' | 'rifle' | 'heavyRifle' | 'sniper' | 'shotgun' | 'knife' | 'launcher' | 'rocket' | 'energy';
 
 /** All inaccuracy values in milliradians (CS weapon-script style), converted at runtime. */
 export interface SpreadDef {
@@ -63,7 +64,7 @@ export interface WeaponDef {
   /** Burst weapons fire `count` rounds at `rpm` per trigger pull; `rpm` above is the burst cadence. */
   burst?: { count: number; rpm: number };
   /** Launchers fire a physical projectile instead of a hitscan bullet. */
-  projectile?: { kind: 'rocket' | 'grenade'; speed: number; gravity: number; radius: number; damage: number; armDistance: number };
+  projectile?: { kind: 'rocket' | 'grenade' | 'plasma'; speed: number; gravity: number; radius: number; damage: number; armDistance: number };
   sound: SoundProfile;
   /** Short description shown in the buy menu. */
   blurb: string;
@@ -76,6 +77,10 @@ export interface WeaponDef {
   };
   /** Spray-pattern cache key: attachments scale the base pattern. */
   patternKey?: string;
+  /** Only in Zombies (Mystery Box wonder weapon): hidden from Search & Destroy menus. */
+  zombiesOnly?: boolean;
+  /** Zombies: Prototype Forge upgrade tier (0 = stock). */
+  tier?: number;
 }
 
 const recoil = (r: Partial<RecoilDef>): RecoilDef => ({
@@ -276,9 +281,20 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     projectile: { kind: 'rocket', speed: 52, gravity: 1.5, radius: 5.5, damage: 170, armDistance: 4 },
     sound: 'rocket', blurb: 'Shoulder-fired rocket. Devastating splash, shreds barricades and gadgets. 2 spare rockets.',
   },
+  disruptor: {
+    id: 'disruptor', name: 'Disruptor X-1', class: 'launcher', slot: 'primary', team: 'both', price: 0, killReward: 0,
+    damage: 0, armorPen: 1, rangeMod: 1, range: 150, rpm: 181, auto: false, mag: 20, reserve: 160,
+    reloadTime: 2.6, drawTime: 0.8, moveSpeed: 5.8,
+    spread: { base: 0.8, stand: 3, crouch: 2, move: 25, air: 80, perShot: 4, recovery: 0.4 },
+    recoil: recoil({ climb: 1.4, climbShots: 1, lateClimb: 0, sway: 0.3, swayPeriod: 2, jitter: 0.2, kick: 1.4, seed: 81 }),
+    projectile: { kind: 'plasma', speed: 70, gravity: 0, radius: 2.4, damage: 380, armDistance: 0 },
+    sound: 'energy', zombiesOnly: true,
+    blurb: 'ACI R&D prototype. Fires bolts of green plasma that burst on impact. Mystery Box only.',
+  },
 };
 
-export const WEAPON_LIST = Object.values(WEAPONS);
+/** Weapons sold in Search & Destroy (the Zombies wonder weapon is excluded). */
+export const WEAPON_LIST = Object.values(WEAPONS).filter((w) => !w.zombiesOnly);
 
 export const DEFAULT_PISTOL: Record<Team, WeaponId> = { T: 'k9', CT: 'warden' };
 

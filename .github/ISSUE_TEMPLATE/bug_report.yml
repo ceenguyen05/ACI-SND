@@ -20,10 +20,17 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: mode
+    attributes:
+      label: Game mode
+      options: [Search & Destroy, Zombies, Menus (before a match)]
+    validations:
+      required: true
+  - type: dropdown
     id: area
     attributes:
       label: Area
-      options: [Movement, Shooting / weapons, Gunsmith / buy menu, Gadgets / utilities, Killstreaks, Bots, HUD / menus, Graphics / performance, Audio, Other]
+      options: [Movement, Shooting / weapons, Gunsmith / buy menu, Gadgets / utilities, Killstreaks, Bots / teammates, Zombies (waves / zombie AI), Zombies (doors / perks / box / forge), HUD / menus, Graphics / performance, Audio, Other]
     validations:
       required: true
   - type: input

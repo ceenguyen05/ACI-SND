@@ -1,39 +1,50 @@
 import { HEADGEAR_OPTIONS, FINISHES, OUTFITS, PALETTE, RARITY_COLORS, SKIN_TONES, STYLE_OPTIONS, type AgentLook } from '../../config/cosmetics';
-import { DIFFICULTY, type BotDifficulty } from '../../config/difficulty';
-import { MATCH_LENGTHS, TEAM_NAMES, type MatchLength, type Team } from '../../config/rules';
+import { TEAM_NAMES, type Team } from '../../config/rules';
 import { WEAPON_LIST, type WeaponId } from '../../config/weapons';
 import { UTILITIES, UTILITY_ORDER } from '../../config/utilities';
 import { STREAKS, STREAK_ORDER } from '../../sim/mode/Killstreaks';
 import { GADGETS, GADGET_ORDER } from '../../config/gadgets';
+import { ZOMBIES, ZOMBIE_ORDER, PERKS, PERK_ORDER, POWERUPS, POWERUP_ORDER, ZDIFF } from '../../config/zombies';
 import { keyLabel } from '../../config/controls';
 import type { Profile, Settings } from '../../app/Profile';
 import type { Input } from '../../app/Input';
-import { ACI_HQ } from '../../sim/maps/aciHq';
+import type { GameMode } from '../../app/GameSession';
 import { sfx } from '../../audio/Sfx';
 import { h } from '../dom';
-import { optRow, seg, swatches, toggle } from '../components';
-import { renderOverview } from '../hud/Radar';
+import { optRow, seg, swatches } from '../components';
 import { SettingsPanel } from './SettingsPanel';
+import { ModeSelect } from './ModeSelect';
+import { zombieArt } from './art';
 
-export type MenuPage = 'play' | 'agents' | 'loadout' | 'settings' | 'help';
+export type MenuPage = 'home' | 'play' | 'agents' | 'loadout' | 'settings' | 'about' | 'help';
+
+export const GAME_TITLE = 'ACI: Series 1';
+export const GAME_VERSION = 'v1.1';
 
 export interface MenuCallbacks {
-  start(spectate: boolean): void;
+  start(mode: GameMode, spectate: boolean): void;
   profileChanged(): void;
   settingsChanged(s: Settings): void;
-  pageChanged(page: MenuPage, ctx: { team: Team; weapon: WeaponId }): void;
+  /** Page / showcase context changed (3D showcase in the lobby behind the menu). */
+  pageChanged(page: MenuPage, ctx: { team: Team; weapon: WeaponId; mode: GameMode | null }): void;
+}
+
+/** ACI : SERIES 1 logo (letters animate in). */
+function logo(cls = 'logo') {
+  const letters = (s: string, d0: number) => [...s].map((c, i) => h('span', { class: 'lt', style: { animationDelay: `${d0 + i * 45}ms` } }, c === ' ' ? ' ' : c));
+  return h('div', { class: cls }, h('span', { class: 'aci' }, ...letters('ACI', 0)), h('span', { class: 'colon' }, ':'), h('span', { class: 'series' }, ...letters('SERIES 1', 180)));
 }
 
 export class TitleScreen {
   readonly el: HTMLDivElement;
   constructor(onContinue: () => void) {
     let done = false;
-    const go = () => { if (done) return; done = true; window.removeEventListener('keydown', go); onContinue(); };
+    const go = () => { if (done) return; done = true; window.removeEventListener('keydown', go); this.el.classList.add('leaving'); setTimeout(onContinue, 260); };
     this.el = h('div', { class: 'title-screen', onclick: go },
-      h('div', { class: 'logo' }, 'ACI', h('span', null, ':'), ' S&D'),
-      h('div', { class: 'logo-sub' }, 'Search & Destroy'),
+      logo('title-logo'),
+      h('div', { class: 'title-modes' }, h('span', null, 'Search & Destroy'), h('i'), h('span', null, 'Zombies')),
       h('div', { class: 'press-any' }, 'Click or press any key'),
-      h('div', { class: 'title-foot' }, 'Map: ACI HQ · Offline 5v5 vs bots · Built with Three.js'));
+      h('div', { class: 'title-foot' }, 'ACI HQ · Offline with bots · Built with Three.js'));
     window.addEventListener('keydown', go);
   }
 }
@@ -41,80 +52,128 @@ export class TitleScreen {
 export class MainMenu {
   readonly el: HTMLDivElement;
   private page: HTMLDivElement;
-  private nav: HTMLElement[] = [];
-  private current: MenuPage = 'play';
+  private home: HTMLDivElement;
+  private current: MenuPage = 'home';
   private agentTeam: Team = 'T';
   private loadoutWeapon: WeaponId = 'ravager';
   private settingsPanel: SettingsPanel;
+  private modes: ModeSelect | null = null;
+  private items: HTMLButtonElement[] = [];
+  private focus = 0;
+  private keyHandler = (e: KeyboardEvent) => this.onKey(e);
 
-  constructor(private profile: Profile, private cb: MenuCallbacks, input: Input) {
-    this.page = h('div', { class: 'menu-page' });
-    const item = (id: MenuPage, label: string) => {
-      const b = h('button', { class: 'nav-item', onclick: () => { sfx.ui_click(); this.show(id); }, onmouseenter: () => sfx.ui_hover() }, label);
-      b.dataset.id = id;
-      this.nav.push(b);
-      return b;
-    };
+  constructor(private profile: Profile, private cb: MenuCallbacks, private input: Input) {
     this.settingsPanel = new SettingsPanel(() => this.profile.settings, (s) => cb.settingsChanged(s), input);
-    this.el = h('div', { class: 'menu' },
-      h('div', { class: 'menu-nav' },
-        h('div', { class: 'logo' }, 'ACI', h('span', null, ':'), 'S&D'),
-        h('div', { class: 'logo-sub' }, 'Search & Destroy'),
-        item('play', 'Play'), item('agents', 'Agents'), item('loadout', 'Loadout'), item('settings', 'Settings'), item('help', 'How to play'),
-        h('div', { class: 'menu-foot' }, `Signed in as `, h('b', null, profile.name), h('br'), 'v0.1 · offline vs bots')),
-      this.page);
-    this.show('play');
+    this.page = h('div', { class: 'mm-page hidden' });
+    this.home = h('div', { class: 'mm-home' });
+    this.el = h('div', { class: 'menu mm' }, this.home, this.page);
+    this.el.addEventListener('mousemove', (e) => {
+      const x = e.clientX / window.innerWidth - 0.5, y = e.clientY / window.innerHeight - 0.5;
+      this.el.style.setProperty('--px', String(x)); this.el.style.setProperty('--py', String(y));
+    });
+    window.addEventListener('keydown', this.keyHandler);
+    this.show('home');
+  }
+
+  dispose() { window.removeEventListener('keydown', this.keyHandler); this.modes?.dispose(); }
+
+  private onKey(e: KeyboardEvent) {
+    if (this.input.captureNext || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+    if (this.modes) { this.modes.onKey(e); return; }
+    if (this.current !== 'home') { if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); sfx.ui_click(); this.show('home'); } return; }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.setFocus(this.focus + 1); e.preventDefault(); }
+    else if (e.code === 'ArrowUp' || e.code === 'KeyW') { this.setFocus(this.focus - 1); e.preventDefault(); }
+    else if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.items[this.focus]?.click(); }
+  }
+
+  private setFocus(i: number) {
+    if (!this.items.length) return;
+    this.focus = (i + this.items.length) % this.items.length;
+    this.items.forEach((b, k) => b.classList.toggle('focus', k === this.focus));
+    sfx.ui_hover();
   }
 
   show(p: MenuPage) {
     this.current = p;
-    for (const b of this.nav) b.classList.toggle('active', b.dataset.id === p);
-    this.page.innerHTML = '';
-    ({ play: () => this.renderPlay(), agents: () => this.renderAgents(), loadout: () => this.renderLoadout(), settings: () => this.renderSettings(), help: () => this.renderHelp() })[p]();
-    this.cb.pageChanged(p, { team: this.agentTeam, weapon: this.loadoutWeapon });
+    if (p === 'play') { this.openModes(); return; }
+    this.home.classList.toggle('hidden', p !== 'home');
+    this.page.classList.toggle('hidden', p === 'home');
+    if (p === 'home') this.renderHome();
+    else {
+      this.page.innerHTML = '';
+      const titles: Record<string, string> = { agents: 'Operators', loadout: 'Loadout', settings: 'Settings', about: 'About', help: 'How to play' };
+      const body = h('div', { class: 'mm-page-body' });
+      this.page.append(h('div', { class: 'mm-page-head' },
+        h('button', { class: 'mm-back', onclick: () => { sfx.ui_click(); this.show('home'); }, onmouseenter: () => sfx.ui_hover() }, h('i', null, '◀'), 'Back'),
+        h('h1', { class: 'page-title' }, titles[p] ?? p)), body);
+      this.page.classList.remove('enter'); void this.page.offsetWidth; this.page.classList.add('enter');
+      ({ agents: () => this.renderAgents(body), loadout: () => this.renderLoadout(body), settings: () => this.renderSettings(body), about: () => this.renderAbout(body), help: () => this.renderHelp(body) } as Record<string, () => void>)[p]?.();
+    }
+    this.cb.pageChanged(p, { team: this.agentTeam, weapon: this.loadoutWeapon, mode: null });
   }
 
   private save() { this.cb.profileChanged(); }
 
-  // -------------------------------------------------------------- PLAY
-  private renderPlay() {
-    const mp = this.profile.match;
-    const card = h('div', { class: 'map-card' });
-    const ov = renderOverview(ACI_HQ, 2);
-    card.append(ov, h('div', { class: 'mode' }, h('span', { class: 'tag', style: 'background:var(--accent);color:#111;border-color:var(--accent)' }, 'SEARCH & DESTROY')),
-      h('div', { class: 'label' }, 'ACI HQ'));
-    const grid = h('div', { class: 'opt-grid' });
-    const add = (l: string, c: HTMLElement) => grid.append(...optRow(l, c));
-    add('Your side', seg<Team | 'auto'>([{ value: 'T', label: TEAM_NAMES.T }, { value: 'CT', label: TEAM_NAMES.CT }, { value: 'auto', label: 'Auto' }], mp.side, (v) => { mp.side = v; this.save(); }));
-    add('Team size', seg([1, 2, 3, 4, 5].map((n) => ({ value: n, label: `${n}v${n}` })), mp.teamSize, (v) => { mp.teamSize = v; this.save(); }));
-    add('Bot difficulty', seg((Object.keys(DIFFICULTY) as BotDifficulty[]).map((d) => ({ value: d, label: DIFFICULTY[d].label })), mp.difficulty, (v) => { mp.difficulty = v; this.save(); }));
-    add('Match length', seg((Object.keys(MATCH_LENGTHS) as MatchLength[]).map((k) => ({ value: k, label: MATCH_LENGTHS[k].label })), mp.length, (v) => { mp.length = v; this.save(); }));
-    add('Freeze time', seg([5, 10, 15].map((n) => ({ value: n, label: n + 's' })), mp.freezeTime, (v) => { mp.freezeTime = v; this.save(); }));
-    add('Friendly fire', toggle(mp.friendlyFire, (v) => { mp.friendlyFire = v; this.save(); }));
-    add('Killstreaks (UAV, drones, missiles)', toggle(mp.killstreaks ?? true, (v) => { mp.killstreaks = v; this.save(); }));
-    const st = this.profile.stats;
-    this.page.append(
-      h('h1', { class: 'page-title' }, 'Play'),
-      h('div', { class: 'play-hero' },
-        h('div', { class: 'col' }, card,
-          h('div', { class: 'card' }, h('h3', null, 'About the map'),
-            h('div', { class: 'muted', style: 'line-height:1.5;font-size:14px' },
-              'A single-story headquarters. West wing: engineering bullpen (B site), conference rooms, cubicles, break room, server room and mail room. East wing: assembly line (A site), factory floor, warehouse racks and shipping docks. Attackers spawn in the loading yard; Defenders in the main lobby.'))),
-        h('div', { class: 'card' }, h('h3', null, 'Match setup'), grid,
-          h('div', { class: 'row', style: 'margin-top:20px' },
-            h('button', { class: 'btn primary', style: 'font-size:20px;padding:14px 40px', onclick: () => { sfx.ui_click(); this.cb.start(false); } }, 'Start match'),
-            h('button', { class: 'btn', onclick: () => { sfx.ui_click(); this.cb.start(true); } }, 'Watch bots')))),
-      h('div', { class: 'card', style: 'margin-top:18px;max-width:858px' }, h('h3', null, 'Career'),
-        h('div', { class: 'stat-row' },
-          ...[['Matches', st.matches], ['Wins', st.wins], ['Kills', st.kills], ['Deaths', st.deaths], ['K/D', st.deaths ? (st.kills / st.deaths).toFixed(2) : st.kills], ['MVPs', st.mvps]]
-            .map(([l, v]) => h('div', null, h('b', null, String(v)), h('span', null, String(l)))))));
+  // -------------------------------------------------------------- HOME
+  private renderHome() {
+    this.home.innerHTML = '';
+    this.items = [];
+    const item = (idx: string, label: string, desc: string, page: MenuPage, primary = false) => {
+      const b = h('button', {
+        class: 'mm-item' + (primary ? ' primary' : ''),
+        onclick: () => { sfx.ui_click(); this.show(page); },
+        onmouseenter: () => { const i = this.items.indexOf(b); if (i >= 0) { this.focus = i; this.items.forEach((x, k) => x.classList.toggle('focus', k === i)); } sfx.ui_hover(); },
+      }, h('span', { class: 'mm-idx' }, idx), h('span', { class: 'mm-label' }, label), h('span', { class: 'mm-desc' }, desc), h('span', { class: 'mm-arrow' }, '›')) as HTMLButtonElement;
+      this.items.push(b);
+      return b;
+    };
+    const link = (label: string, page: MenuPage) => h('button', { class: 'mm-link', onclick: () => { sfx.ui_click(); this.show(page); }, onmouseenter: () => sfx.ui_hover() }, label);
+    const st = this.profile.stats, zs = this.profile.zstats;
+    const best = Math.max(0, ...Object.values(zs.best).map((x) => x ?? 0));
+    const stat = (v: string | number, l: string) => h('div', null, h('b', null, String(v)), h('span', null, l));
+    this.home.append(
+      h('div', { class: 'mm-left' },
+        logo('mm-logo'),
+        h('div', { class: 'mm-tag' }, 'Tactical shooter · ACI HQ'),
+        h('nav', { class: 'mm-nav' },
+          item('01', 'Play Now', 'Search & Destroy or Zombies', 'play', true),
+          item('02', 'Settings', 'Controls, video, audio, gameplay', 'settings'),
+          item('03', 'About', 'Game modes, credits and version', 'about')),
+        h('div', { class: 'mm-links' }, link('Operators', 'agents'), h('i'), link('Loadout', 'loadout'), h('i'), link('How to play', 'help')),
+        h('div', { class: 'mm-foot' }, 'Signed in as ', h('b', null, this.profile.name), ` · ${GAME_VERSION} · ↑ ↓ Enter to navigate`)),
+      h('div', { class: 'mm-right' },
+        h('button', { class: 'mm-feature', onclick: () => { sfx.ui_click(); this.openModes('zombies'); }, onmouseenter: () => sfx.ui_hover() },
+          h('div', { class: 'mm-feature-art' }, zombieArt(420, 200)),
+          h('div', { class: 'mm-feature-body' },
+            h('span', { class: 'tag' }, 'New mode'),
+            h('h3', null, 'Zombies — ACI HQ: Outbreak'),
+            h('p', null, 'Hold the building against endless waves with up to four bot teammates. Earn points, open the doors, find the Mystery Box, forge your guns.'),
+            h('span', { class: 'mm-feature-cta' }, 'Play Zombies ›'))),
+        h('div', { class: 'mm-career' },
+          h('div', { class: 'mm-career-col' }, h('h4', null, 'Search & Destroy'), h('div', { class: 'stat-row' }, stat(st.matches, 'Matches'), stat(st.wins, 'Wins'), stat(st.deaths ? (st.kills / st.deaths).toFixed(2) : st.kills, 'K/D'))),
+          h('div', { class: 'mm-career-col z' }, h('h4', null, 'Zombies'), h('div', { class: 'stat-row' }, stat(best || '—', 'Best wave'), stat(zs.kills, 'Kills'), stat(zs.exfils, 'Exfils'))))));
+    this.setFocus(Math.min(this.focus, this.items.length - 1));
   }
 
-  // -------------------------------------------------------------- AGENTS
-  private renderAgents() {
+  private openModes(preselect?: GameMode) {
+    this.home.classList.add('hidden');
+    this.page.classList.add('hidden');
+    this.modes = new ModeSelect(this.profile, {
+      back: () => { this.modes?.dispose(); this.modes?.el.remove(); this.modes = null; this.show('home'); },
+      start: (mode, spectate) => this.cb.start(mode, spectate),
+      changed: () => this.save(),
+      focus: (mode) => this.cb.pageChanged('play', { team: this.agentTeam, weapon: this.loadoutWeapon, mode }),
+    }, preselect);
+    this.el.append(this.modes.el);
+    this.current = 'play';
+    this.cb.pageChanged('play', { team: this.agentTeam, weapon: this.loadoutWeapon, mode: preselect ?? null });
+  }
+
+  // -------------------------------------------------------------- OPERATORS
+  private renderAgents(body: HTMLElement) {
     const team = this.agentTeam;
     const look = this.profile.looks[team];
-    const changed = () => { this.save(); this.cb.pageChanged('agents', { team: this.agentTeam, weapon: this.loadoutWeapon }); };
+    const changed = () => { this.save(); this.cb.pageChanged('agents', { team: this.agentTeam, weapon: this.loadoutWeapon, mode: null }); };
     const nameInput = h('input', { class: 'text-input', value: this.profile.name, maxlength: '16' }) as HTMLInputElement;
     nameInput.addEventListener('change', () => { this.profile.name = nameInput.value.trim().slice(0, 16) || 'Player'; this.save(); });
     const presets = h('div', { class: 'col' });
@@ -133,17 +192,17 @@ export class MainMenu {
     add('Trousers', swatches(PALETTE, look.secondary, (c) => set('secondary', c)));
     add('Accent', swatches(PALETTE, look.accent, (c) => set('accent', c)));
     add('Skin tone', swatches(SKIN_TONES, look.skin, (c) => set('skin', c)));
-    this.page.append(
-      h('h1', { class: 'page-title' }, 'Agents'),
+    body.append(
       h('div', { class: 'row', style: 'margin-bottom:14px' }, h('span', { class: 'muted' }, 'Callsign'), nameInput),
-      seg<Team>([{ value: 'T', label: TEAM_NAMES.T }, { value: 'CT', label: TEAM_NAMES.CT }], team, (t) => { this.agentTeam = t; this.show('agents'); }),
+      h('div', { class: 'row', style: 'gap:12px;align-items:center' }, seg<Team>([{ value: 'T', label: TEAM_NAMES.T }, { value: 'CT', label: TEAM_NAMES.CT }], team, (t) => { this.agentTeam = t; this.show('agents'); }),
+        h('span', { class: 'muted', style: 'font-size:13px' }, 'Your Defenders look is also used in Zombies.')),
       h('div', { class: 'row', style: 'align-items:flex-start;margin-top:14px;gap:16px;max-width:700px' },
         h('div', { class: 'card', style: 'width:220px;flex:none' }, h('h3', null, 'Presets'), presets),
         h('div', { class: 'card grow' }, h('h3', null, 'Customize'), grid)));
   }
 
   // -------------------------------------------------------------- LOADOUT
-  private renderLoadout() {
+  private renderLoadout(body: HTMLElement) {
     const fin = this.profile.finishes;
     const grid = h('div', { class: 'weapon-grid' });
     for (const w of WEAPON_LIST) {
@@ -164,7 +223,7 @@ export class MainMenu {
         h('div', null, h('div', null, f.name), h('div', { class: 'rar', style: { color: RARITY_COLORS[f.rarity] } }, f.rarity))));
     }
     const def = WEAPON_LIST.find((w) => w.id === this.loadoutWeapon)!;
-    this.page.append(h('h1', { class: 'page-title' }, 'Loadout'),
+    body.append(
       h('div', { class: 'card', style: 'max-width:620px;margin-bottom:14px' }, h('h3', null, def.name),
         h('div', { class: 'muted', style: 'font-size:14px' }, def.blurb),
         def.class !== 'knife' ? h('div', { class: 'stat-row', style: 'margin-top:12px' },
@@ -175,55 +234,83 @@ export class MainMenu {
   }
 
   // -------------------------------------------------------------- SETTINGS
-  private renderSettings() {
-    this.page.append(h('h1', { class: 'page-title' }, 'Settings'), this.settingsPanel.el);
+  private renderSettings(body: HTMLElement) {
+    body.append(this.settingsPanel.el);
     this.settingsPanel.render();
   }
 
+  // -------------------------------------------------------------- ABOUT
+  private renderAbout(body: HTMLElement) {
+    const li = (...c: (Node | string)[]) => h('li', null, ...c);
+    body.append(h('div', { class: 'help-cols about' },
+      h('div', { class: 'card about-hero' }, logo('about-logo'),
+        h('p', null, `${GAME_TITLE} is a browser tactical shooter set in ACI HQ — a single-story headquarters with offices to the west and a manufacturing plant to the east.`),
+        h('div', { class: 'stat-row', style: 'margin-top:10px' },
+          ...[[GAME_VERSION, 'Version'], ['2', 'Game modes'], ['23', 'Weapons'], [String(ZOMBIE_ORDER.length), 'Zombie types']].map(([v, l]) => h('div', null, h('b', null, v), h('span', null, l))))),
+      h('div', { class: 'card' }, h('h3', null, 'Search & Destroy'), h('ul', null,
+        li('CS-style bomb defusal: Attackers plant at A or B, Defenders defuse. One life per round.'),
+        li('Teams from 1v1 to 5v5 against bots, a full economy, gadgets, killstreaks and the Gunsmith.'),
+        li('Tilt-aim, slides, prone, mantling, wallbangs and a final killcam.'))),
+      h('div', { class: 'card' }, h('h3', null, 'Zombies'), h('ul', null,
+        li('Round-based co-op survival on ', h('b', null, 'ACI HQ: Outbreak'), ' — squads of 1, 3 or 5 (your teammates are bots).'),
+        li('Start with a knife and a pistol. Earn points to open doors, buy wall weapons and perks, roll the Mystery Box and upgrade guns in the Prototype Forge.'),
+        li(`${ZOMBIE_ORDER.length} zombie types, frenzy waves, Juggernaut boss waves, power-ups and an exfil to escape.`))),
+      h('div', { class: 'card' }, h('h3', null, 'Credits'), h('ul', null,
+        li('Design, code, models, animation and sound: generated procedurally in TypeScript — no audio or model files.'),
+        li('Rendering: Three.js · Build: Vite · Tests: Vitest + Playwright.'),
+        li('Scanned surface textures: CC0 (see docs/ASSETS.md).'),
+        li('Inspired by Counter-Strike, Call of Duty Zombies, Rainbow Six Siege, Killing Floor and Roblox Operation One.'))),
+      h('div', { class: 'card' }, h('h3', null, 'Your records'), h('ul', null,
+        li(`Search & Destroy: ${this.profile.stats.matches} matches, ${this.profile.stats.wins} wins, ${this.profile.stats.kills} kills.`),
+        ...(['casual', 'normal', 'hardened', 'nightmare'] as const).map((d) => li(`Zombies ${ZDIFF[d].label}: best wave ${this.profile.zstats.best[d] ?? '—'}`)),
+        li(`Zombies: ${this.profile.zstats.games} games, ${this.profile.zstats.kills} kills, ${this.profile.zstats.revives} revives, ${this.profile.zstats.exfils} exfils.`)))));
+  }
+
   // -------------------------------------------------------------- HELP
-  private renderHelp() {
+  private renderHelp(body: HTMLElement) {
     const b = this.profile.settings.bindings;
     const k = (code: string) => h('span', { class: 'kbd' }, keyLabel(code));
     const li = (...c: (Node | string)[]) => h('li', null, ...c);
-    this.page.append(h('h1', { class: 'page-title' }, 'How to play'),
+    body.append(
       h('div', { class: 'help-cols' },
-        h('div', { class: 'card' }, h('h3', null, 'Objective'), h('ul', null,
+        h('div', { class: 'card' }, h('h3', null, 'Search & Destroy'), h('ul', null,
           li(h('b', { class: 't-color' }, 'Attackers'), ' carry the bomb. Plant it at site ', h('b', null, 'A'), ' (assembly line) or ', h('b', null, 'B'), ' (engineering bullpen) and defend it for 40 seconds, or eliminate all Defenders.'),
           li(h('b', { class: 'ct-color' }, 'Defenders'), ' stop the plant, defuse a planted bomb (10s, 5s with a kit), or survive until the 1:55 round timer expires.'),
           li('Sides switch at halftime. Money resets to $800.'),
           li('Win: $3,250 (elimination or time) / $3,500 (bomb or defuse). Losing streaks pay $1,400 → $3,400. Kills pay by weapon class.'))),
+        h('div', { class: 'card' }, h('h3', null, 'Zombies'), h('ul', null,
+          li('Survive the waves. Zombies get faster and tougher every wave; specials join in as you go.'),
+          li('Points: 10 per hit, 50–130 per kill (headshot 100, knife 130) and a bonus for every cleared wave.'),
+          li(k(b.use), ' buys: wall weapons (ammo at half price), shutters to new areas, perks, the Mystery Box, the Prototype Forge (5,000 upgrade, needs power) and the Armory.'),
+          li('Turn on the ', h('b', null, 'power'), ' in the Server Room to switch on the perk machines and the forge.'),
+          li('Going down isn\'t the end: hold ', k(b.use), ' next to a downed teammate to revive them. Solo? Buy Second Wind or a Self-Revive Kit.'),
+          li('From wave 10 (Short) or 20 (Long) the radio in the lobby calls an ', h('b', null, 'exfil'), ': reach the landing zone in the Loading Yard and hold it.'))),
         h('div', { class: 'card' }, h('h3', null, 'Movement & aiming'), h('ul', null,
           li(k(b.forward), k(b.left), k(b.back), k(b.right), 'move · ', k(b.jump), 'jump'),
           li(k(b.walk), 'walk silently · ', k(b.crouch), 'crouch; keep holding while still to go prone (Settings: Toggle mode for CoD-style crouch)'),
           li(k(b.slide), 'slide while running forward. Slides make noise and reduce accuracy.'),
           li(k(b.leanLeft), k(b.leanRight), h('b', null, 'tilt / lean'), ' around corners to peek with less of your body exposed'),
           li('Left mouse fire · Right mouse ', h('b', null, 'aim down sights'), ' (scoped rifles zoom, knife stabs)'),
-          li('Stand still to shoot accurately. Running and jumping add a lot of spread. Pull the mouse down against each gun\'s spray pattern.'),
-          li('Press ', k(b.crouch), ' in mid-air to ', h('b', null, 'crouch-jump'), ' onto higher boxes. Spamming jump makes each hop lower.'),
-          li('Hold ', k(b.jump), ' while moving into a chest-high ledge to ', h('b', null, 'mantle'), ' onto it.'),
-          li('Bullets go through wood, glass and thin metal (', h('b', null, 'wallbangs'), '). Optional aim assist: Settings → Game.'))),
+          li('Stand still to shoot accurately. Running and jumping add a lot of spread.'),
+          li('Hold ', k(b.jump), ' while moving into a chest-high ledge to ', h('b', null, 'mantle'), ' onto it.'))),
         h('div', { class: 'card' }, h('h3', null, 'Weapons & items'), h('ul', null,
-          li(k(b.buy), 'buy menu (spawn area, first 20s of round) · in the menu: R rebuy, A auto-buy, 4 Gunsmith'),
+          li(k(b.buy), 'buy menu (S&D: spawn area, first 20s of round) · R rebuy, A auto-buy, 4 Gunsmith'),
           li(k(b.primary), k(b.secondary), k(b.melee), k(b.grenade), k(b.bomb), 'weapon slots · ', k(b.lastWeapon), 'last weapon · mouse wheel cycles'),
-          li(k(b.reload), 'reload · ', k(b.drop), 'drop weapon · ', k(b.use), 'pick up / defuse / resupply at an ammo box'),
-          li(k(b.quickMelee), h('b', null, 'quick melee'), ' — stab without switching weapons (breaks barricades and gadgets)'),
-          li(k(b.stimSelf), 'stim yourself (needs a Stim Pistol) · ', k(b.detonate), 'detonate your C4'),
-          li(k(b.ping), h('b', null, 'ping'), ' the enemy or spot under your crosshair for your team · ', k(b.inspect), 'inspect your weapon'),
-          li(h('b', null, 'Gunsmith'), ' (buy menu tab 4): optics, suppressors, grips, lasers, mags and more – up to 5 per gun, kept for the half even if you die. ', k(b.light), ' toggles a weapon light.'),
-          li('With a crowbar, hold ', k(b.use), ' at a barricade to pry it off.'),
-          li('Bomb: equip with ', k(b.bomb), ', hold left mouse inside a site for 3.2s.'),
+          li(k(b.reload), 'reload · ', k(b.drop), 'drop weapon · ', k(b.use), 'use / pick up / defuse'),
+          li(k(b.quickMelee), h('b', null, 'quick melee'), ' — stab without switching weapons'),
+          li(k(b.stimSelf), 'stim yourself · ', k(b.detonate), 'detonate your C4 · ', k(b.ping), 'ping · ', k(b.inspect), 'inspect'),
           li(k(b.scoreboard), 'scoreboard · Esc pause'))),
-        h('div', { class: 'card' }, h('h3', null, 'Killstreaks'), h('ul', null,
+        h('div', { class: 'card' }, h('h3', null, 'Zombie field guide'), h('ul', null,
+          ...ZOMBIE_ORDER.map((z) => li(h('b', { style: { color: ZOMBIES[z].eye } }, ZOMBIES[z].name), ` — ${ZOMBIES[z].blurb} `, h('i', { class: 'muted' }, ZOMBIES[z].counter))))),
+        h('div', { class: 'card' }, h('h3', null, 'Perks & power-ups'), h('ul', null,
+          ...PERK_ORDER.map((p) => li(h('b', { style: { color: PERKS[p].color } }, `${PERKS[p].name} (${PERKS[p].price.toLocaleString('en-US')})`), ` — ${PERKS[p].blurb}`)),
+          ...POWERUP_ORDER.map((p) => li(h('b', { style: { color: POWERUPS[p].color } }, POWERUPS[p].name), ` — ${POWERUPS[p].blurb}`)))),
+        h('div', { class: 'card' }, h('h3', null, 'Killstreaks (S&D)'), h('ul', null,
           li('Kills in one life earn rewards. They are kept until you use them with ', k(b.killstreak), '. Dying resets the count.'),
-          li('Rounds won by eliminating the other team end with a ', h('b', null, 'final killcam'), ' of the deciding kill (Space skips).'),
           ...STREAK_ORDER.map((id) => li(h('b', null, `${STREAKS[id].name} (${STREAKS[id].kills} kills)`), ` — ${STREAKS[id].blurb}`)))),
         h('div', { class: 'card' }, h('h3', null, 'Utilities & gadgets'), h('ul', null,
           ...UTILITY_ORDER.map((u) => li(h('b', null, UTILITIES[u].name), ` ($${UTILITIES[u].price}) — ${UTILITIES[u].blurb}`)),
-          li('Left mouse = full throw, right mouse = underhand lob, both = medium.'))),
-        h('div', { class: 'card' }, h('h3', null, 'Gadgets & cameras'), h('ul', null,
-          li(k(b.gadget), 'cycle gadgets · left mouse throws / places the selected gadget'),
-          li(k(b.cams), 'open camera & drone feeds · ', k(b.leanLeft), k(b.leanRight), 'switch feed · left mouse pings enemies'),
-          li('Defenders always have the building CCTV network.'),
+          li(k(b.gadget), 'cycle gadgets · ', k(b.cams), 'camera & drone feeds'),
           ...GADGET_ORDER.map((g) => li(h('b', null, GADGETS[g].name), ` ($${GADGETS[g].price}${GADGETS[g].team === 'both' ? '' : ', ' + (GADGETS[g].team === 'T' ? 'Attackers' : 'Defenders')}) — ${GADGETS[g].blurb}`))))));
   }
 

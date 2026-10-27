@@ -16,6 +16,7 @@ const GUN: Record<SoundProfile, GunVoice> = {
   knife: { body: 3000, q: 1, thump: 0, dur: 0.1, gain: 0.3, click: 0 },
   launcher: { body: 260, q: 0.6, thump: 1.6, dur: 0.3, gain: 1.0, click: 0.5 },
   rocket: { body: 180, q: 0.5, thump: 1.8, dur: 0.9, gain: 1.2, click: 0.6 },
+  energy: { body: 2600, q: 4, thump: 0.25, dur: 0.18, gain: 0.55, click: 0.15 },
 };
 
 /**
@@ -383,6 +384,176 @@ export class Sfx {
     this.tone({ at: null, type: 'sine', freq: 1500, dur: 0.08, gain: 0.12, delay: 0.04, bus: this.ui });
   }
   denied() { this.tone({ at: null, type: 'square', freq: 220, dur: 0.12, gain: 0.08, bus: this.ui }); }
+
+  // ---------------------------------------------------------------- zombies
+  private voiceBudget = 0;
+  private voiceAt = 0;
+  /** Formant voice: detuned saws through a vowel band-pass, with a pitch glide. */
+  private voice(at: Pos, f0: number, f1: number, dur: number, gain: number, formant: number, q = 3, delay = 0) {
+    const c = this.ctx; if (!c) return;
+    const t = c.currentTime + delay;
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = formant; f.Q.value = q;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.12, dur * 0.25));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    f.connect(g).connect(this.out(at));
+    for (const det of [0.995, 1.012]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f0 * det, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * det), t + dur);
+      o.connect(f); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+  /** Limit how many zombie voices start in a short window (a horde would be a wall of noise). */
+  private allowVoice(): boolean {
+    const c = this.ctx; if (!c) return false;
+    const now = c.currentTime;
+    if (now - this.voiceAt > 0.5) { this.voiceAt = now; this.voiceBudget = 0; }
+    return ++this.voiceBudget <= 4;
+  }
+  zombieVoice(at: Pos, kind: string, mood: 'groan' | 'growl' | 'death' | 'spit' | 'fuse') {
+    if (!this.allowVoice()) return;
+    const deep = kind === 'tank' ? 0.45 : kind === 'brute' ? 0.7 : kind === 'bloater' ? 0.8 : kind === 'shrieker' || kind === 'spitter' ? 1.35 : kind === 'runner' ? 1.15 : 1;
+    const r = 0.85 + Math.random() * 0.3;
+    switch (mood) {
+      case 'groan':
+        this.voice(at, 115 * deep * r, 82 * deep * r, 0.9 + Math.random() * 0.6, 0.28, 520 * deep + Math.random() * 120, 2.5);
+        break;
+      case 'growl':
+        this.voice(at, 150 * deep * r, 95 * deep * r, 0.45, 0.32, 700 * deep, 2);
+        this.noiseHit({ at, dur: 0.4, type: 'bandpass', freq: 380 * deep, q: 1.5, gain: 0.22 });
+        break;
+      case 'death':
+        this.voice(at, 130 * deep * r, 50 * deep, 0.6, 0.3, 480 * deep, 2);
+        this.noiseHit({ at, dur: 0.35, type: 'lowpass', freq: 600, freqEnd: 150, gain: 0.25 });
+        break;
+      case 'spit':
+        this.noiseHit({ at, dur: 0.3, type: 'bandpass', freq: 1400, freqEnd: 500, q: 1.2, gain: 0.45 });
+        this.voice(at, 260, 160, 0.25, 0.18, 900, 3);
+        break;
+      case 'fuse':
+        for (let i = 0; i < 8; i++) this.tone({ at, type: 'square', freq: 1900, dur: 0.05, gain: 0.22, delay: i * 0.11 * (1 - i * 0.07) });
+        break;
+    }
+  }
+  zombieScream(at: Pos) {
+    this.voice(at, 620, 980, 1.0, 0.5, 1800, 1.5);
+    this.voice(at, 940, 1500, 0.9, 0.35, 2600, 2, 0.05);
+    this.noiseHit({ at, dur: 1.0, type: 'highpass', freq: 2600, gain: 0.3, attack: 0.05 });
+  }
+  zombieRoar(at: Pos) {
+    this.voice(at, 70, 44, 1.6, 0.9, 260, 1.2);
+    this.voice(at, 104, 66, 1.4, 0.5, 420, 1.5, 0.05);
+    this.noiseHit({ at, dur: 1.5, type: 'lowpass', freq: 500, freqEnd: 180, gain: 0.55, attack: 0.08 });
+  }
+  zombieSwipe(at: Pos, hit: boolean) {
+    this.noiseHit({ at, dur: 0.16, type: 'bandpass', freq: 1500, freqEnd: 500, q: 0.8, gain: 0.3 });
+    if (hit) this.noiseHit({ at, dur: 0.12, type: 'lowpass', freq: 700, gain: 0.7, delay: 0.05 });
+  }
+  zombieStep(at: Pos, heavy: boolean) {
+    if (heavy) this.noiseHit({ at, dur: 0.22, type: 'lowpass', freq: 160, gain: 0.9 });
+    else this.noiseHit({ at, dur: 0.14, type: 'lowpass', freq: 420 + Math.random() * 200, gain: 0.32 });
+  }
+  zombieRise(at: Pos) {
+    this.noiseHit({ at, dur: 0.9, type: 'lowpass', freq: 380, freqEnd: 120, gain: 0.45 });
+    for (let i = 0; i < 5; i++) this.noiseHit({ at, dur: 0.05, type: 'bandpass', freq: 1800 + Math.random() * 1500, q: 3, gain: 0.18, delay: 0.1 + i * 0.12 });
+  }
+  gasBurst(at: Pos) {
+    this.noiseHit({ at, dur: 1.4, type: 'lowpass', freq: 900, freqEnd: 220, gain: 0.6, attack: 0.02 });
+    this.voice(at, 90, 50, 0.6, 0.25, 300, 1);
+  }
+  acidSizzle(at: Pos) { this.noiseHit({ at, dur: 1.2, type: 'highpass', freq: 3200, freqEnd: 1800, gain: 0.22, attack: 0.05 }); }
+  shockZap(at: Pos) {
+    for (let i = 0; i < 6; i++) this.noiseHit({ at, dur: 0.06, type: 'highpass', freq: 3000 + Math.random() * 3000, gain: 0.35, delay: i * 0.04 });
+    this.tone({ at, type: 'sawtooth', freq: 120, freqEnd: 60, dur: 0.35, gain: 0.25 });
+  }
+  disruptorZap(at: Pos) {
+    this.tone({ at, type: 'sawtooth', freq: 1800, freqEnd: 300, dur: 0.22, gain: 0.3 });
+    this.tone({ at, type: 'sine', freq: 900, freqEnd: 2200, dur: 0.12, gain: 0.25 });
+  }
+  /** Ominous wave start: low bell + drum hits (frenzy: alarm, boss: horn). */
+  waveStart(kind: 'normal' | 'frenzy' | 'boss') {
+    const ui = this.ui;
+    if (kind === 'frenzy') {
+      for (let i = 0; i < 4; i++) { this.tone({ at: null, type: 'square', freq: 660, dur: 0.22, gain: 0.07, delay: i * 0.5, bus: ui }); this.tone({ at: null, type: 'square', freq: 520, dur: 0.22, gain: 0.07, delay: i * 0.5 + 0.25, bus: ui }); }
+    }
+    if (kind === 'boss') this.voice(null, 65, 58, 2.6, 0.5, 300, 1, 0);
+    for (const [f, d] of [[110, 0], [164.8, 0.02], [220, 0.04]] as const) this.tone({ at: null, type: 'sine', freq: f, freqEnd: f * 0.99, dur: 3.2, gain: 0.16, delay: d, bus: ui, attack: 0.01 });
+    for (let i = 0; i < 3; i++) this.noiseHit({ at: null, dur: 0.3, type: 'lowpass', freq: 140, gain: 0.7, delay: 0.4 + i * 0.42, bus: ui });
+  }
+  waveEnd() {
+    [[523, 415], [440, 330], [330, 247]].forEach(([a, b], i) => this.tone({ at: null, type: 'triangle', freq: a, freqEnd: b, dur: 1.6, gain: 0.1, delay: i * 0.18, bus: this.ui }));
+  }
+  purchase() {
+    this.tone({ at: null, type: 'triangle', freq: 1568, dur: 0.08, gain: 0.14, bus: this.ui });
+    this.tone({ at: null, type: 'triangle', freq: 2093, dur: 0.16, gain: 0.14, delay: 0.07, bus: this.ui });
+    this.noiseHit({ at: null, dur: 0.12, type: 'highpass', freq: 5000, gain: 0.12, delay: 0.05, bus: this.ui });
+  }
+  doorOpen(at: Pos) {
+    for (let i = 0; i < 9; i++) this.noiseHit({ at, dur: 0.07, type: 'bandpass', freq: 900 + (i % 3) * 200, q: 3, gain: 0.35, delay: i * 0.09 });
+    this.noiseHit({ at, dur: 0.6, type: 'lowpass', freq: 300, gain: 0.5, delay: 0.85 });
+  }
+  powerOn() {
+    this.tone({ at: null, type: 'sawtooth', freq: 40, freqEnd: 120, dur: 2.5, gain: 0.2, bus: this.ui, attack: 1.2 });
+    this.tone({ at: null, type: 'sine', freq: 60, dur: 3.5, gain: 0.25, bus: this.ui, attack: 0.8, delay: 0.5 });
+    for (let i = 0; i < 10; i++) this.noiseHit({ at: null, dur: 0.05, type: 'highpass', freq: 4000, gain: 0.2, delay: 0.2 + Math.random() * 1.8, bus: this.ui });
+    this.noiseHit({ at: null, dur: 0.5, type: 'lowpass', freq: 200, gain: 0.8, delay: 2.4, bus: this.ui });
+  }
+  /** Perk machine jingle (each perk starts on its own note). */
+  perkJingle(seed: number) {
+    const base = [262, 294, 330, 349, 392, 440, 494, 523][seed % 8];
+    [1, 1.25, 1.5, 2, 1.5, 2].forEach((m, i) => this.tone({ at: null, type: 'triangle', freq: base * m, dur: 0.18, gain: 0.12, delay: i * 0.13, bus: this.ui }));
+    this.tone({ at: null, type: 'sine', freq: base / 2, dur: 0.9, gain: 0.1, delay: 0.1, bus: this.ui });
+  }
+  /** Mystery Box music-box tune while it spins. */
+  boxSpin(at: Pos, seconds: number) {
+    const notes = [659, 784, 988, 784, 659, 523, 587, 659, 784, 659, 523, 494];
+    const n = Math.floor(seconds / 0.32);
+    for (let i = 0; i < n; i++) this.tone({ at, type: 'sine', freq: notes[i % notes.length] * 2, dur: 0.3, gain: 0.16, delay: i * 0.32, attack: 0.003 });
+  }
+  boxReady(at: Pos) { this.tone({ at, type: 'triangle', freq: 1047, dur: 0.4, gain: 0.2 }); this.tone({ at, type: 'triangle', freq: 1568, dur: 0.6, gain: 0.18, delay: 0.12 }); }
+  boxTeddy(at: Pos) {
+    [392, 370, 349, 330].forEach((f, i) => this.voice(at, f, f * 0.92, 0.22, 0.25, 900, 4, i * 0.2));
+  }
+  forgeWork(at: Pos) {
+    this.tone({ at, type: 'sawtooth', freq: 80, freqEnd: 160, dur: 3.4, gain: 0.18, attack: 0.3 });
+    for (let i = 0; i < 6; i++) this.noiseHit({ at, dur: 0.12, type: 'bandpass', freq: 600, q: 2, gain: 0.4, delay: 0.4 + i * 0.5 });
+    this.tone({ at, type: 'triangle', freq: 880, freqEnd: 1760, dur: 0.6, gain: 0.15, delay: 3.2 });
+  }
+  powerUpDrop(at: Pos) { [1320, 1760, 2093].forEach((f, i) => this.tone({ at, type: 'sine', freq: f, dur: 0.25, gain: 0.18, delay: i * 0.06 })); }
+  powerUpGrab() {
+    [523, 784, 1047, 1568].forEach((f, i) => this.tone({ at: null, type: 'triangle', freq: f, dur: 0.22, gain: 0.16, delay: i * 0.05, bus: this.ui }));
+    this.noiseHit({ at: null, dur: 0.5, type: 'highpass', freq: 6000, gain: 0.12, bus: this.ui });
+  }
+  powerUpEnd() { this.tone({ at: null, type: 'triangle', freq: 784, freqEnd: 392, dur: 0.5, gain: 0.12, bus: this.ui }); }
+  nukeFlash() {
+    this.noiseHit({ at: null, dur: 2.2, type: 'lowpass', freq: 600, freqEnd: 60, gain: 1.0, bus: this.ui });
+    this.tone({ at: null, type: 'sine', freq: 200, freqEnd: 2400, dur: 1.4, gain: 0.12, bus: this.ui });
+  }
+  downed() {
+    this.tone({ at: null, type: 'sine', freq: 70, freqEnd: 40, dur: 1.2, gain: 0.5, bus: this.ui });
+    this.setMuffle(true);
+  }
+  revived() {
+    this.setMuffle(false);
+    [392, 494, 587, 784].forEach((f, i) => this.tone({ at: null, type: 'triangle', freq: f, dur: 0.4, gain: 0.12, delay: i * 0.07, bus: this.ui }));
+  }
+  /** Muffle the world (downed / bleeding out). */
+  setMuffle(on: boolean) {
+    const c = this.ctx; if (!c) return;
+    const t = c.currentTime;
+    this.muffle.frequency.cancelScheduledValues(t);
+    this.muffle.frequency.setValueAtTime(Math.max(20, this.muffle.frequency.value), t);
+    this.muffle.frequency.exponentialRampToValueAtTime(on ? 700 : 20000, t + (on ? 0.4 : 0.8));
+  }
+  radio() {
+    this.noiseHit({ at: null, dur: 0.8, type: 'bandpass', freq: 1800, q: 0.6, gain: 0.25, bus: this.ui });
+    [1200, 1200, 1600].forEach((f, i) => this.tone({ at: null, type: 'square', freq: f, dur: 0.08, gain: 0.06, delay: 0.9 + i * 0.16, bus: this.ui }));
+  }
+  rotor(at: Pos) { this.noiseHit({ at, dur: 0.09, type: 'lowpass', freq: 220, gain: 0.7 }); }
 }
 
 export const sfx = new Sfx();

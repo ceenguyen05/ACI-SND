@@ -25,13 +25,14 @@
     "screenshots": "node scripts/screenshots.mjs",
     "balance": "node scripts/balance.mjs",
     "map:ascii": "node scripts/print-map.mjs",
-    "verify": "npm run check && npm run check:boot && node scripts/smoke-test.mjs --no-build && node scripts/keys-check.mjs --no-build",
+    "verify": "npm run check && npm run check:boot && node scripts/smoke-test.mjs --no-build && node scripts/keys-check.mjs --no-build && node scripts/zombies-look.mjs --no-build",
     "perf": "node scripts/perf.mjs",
     "test:handling": "node scripts/handling-check.mjs",
     "test:keys": "node scripts/keys-check.mjs",
     "test:visual": "node scripts/visual-check.mjs",
     "assets:surfaces": "node scripts/fetch-surface-assets.mjs",
-    "bake": "node scripts/bake-lighting.mjs"
+    "bake": "node scripts/bake-lighting.mjs",
+    "test:zombies": "node scripts/zombies-look.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

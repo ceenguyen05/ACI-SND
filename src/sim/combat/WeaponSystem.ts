@@ -95,7 +95,7 @@ export function updateWeapon(ctx: SimContext, a: Agent, cmd: AgentCommand, dt: n
   if (cmd.detonate && !frozen) ctx.gadgets.detonateC4(a);
   if (cmd.light) a.lightOn = !a.lightOn;
   if (a.lightOn && !w?.def.mods?.light) a.lightOn = false;
-  if (cmd.stimSelf && !frozen && a.gadgets.stim > 0 && now >= a.stimReadyAt && now >= wpn.meleeUntil && a.health < 100) {
+  if (cmd.stimSelf && !frozen && a.gadgets.stim > 0 && now >= a.stimReadyAt && now >= wpn.meleeUntil && a.health < a.maxHealth) {
     a.gadgets.stim--;
     a.stimReadyAt = now + 0.9;
     healWithStim(ctx, a, a, true);
@@ -250,7 +250,7 @@ export function updateWeapon(ctx: SimContext, a: Agent, cmd: AgentCommand, dt: n
     wpn.nextAttack = (continuous ? Math.max(now - dt, wpn.nextAttack) : now) + cycle;
   }
   if (def.projectile) {
-    ctx.ordnance.fireLauncher(a, def.id, inaccuracy(def, a));
+    ctx.ordnance.fireLauncher(a, def, inaccuracy(def, a));
     const eye = a.eyePos(new Vector3());
     ctx.events.emit('shot', { agentId: a.id, weaponId: def.id, sound: def.sound, origin: eye, end: eye.clone().add(a.viewDir(new Vector3()).multiplyScalar(2)), tracer: false, pellet: false });
     ctx.noise(eye, 45, a, 'gunshot');

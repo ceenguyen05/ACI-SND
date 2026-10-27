@@ -1,7 +1,7 @@
 // Quick visual check: a handful of in-game views at a chosen quality.
 //   node scripts/look.mjs [quality=medium] [--no-build] [--spots=a,b,c]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const quality = process.argv.find((a) => ['low', 'medium', 'high'].includes(a)) ?? 'medium';
@@ -18,8 +18,7 @@ page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') 
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 await page.evaluate((q) => {
   const { app, match, session } = window.__aci;

@@ -1,4 +1,4 @@
-import { CollisionWorld, type SurfaceKind } from '../physics/CollisionWorld';
+import { CollisionWorld, type Box, type SurfaceKind } from '../physics/CollisionWorld';
 import { NavGrid } from '../ai/NavGrid';
 import { inRect } from '../../core/math';
 import type { Team } from '../../config/rules';
@@ -20,7 +20,8 @@ export class World {
   readonly walls: WallBlock[];
   readonly ceilings: CeilingBlock[];
 
-  constructor(map: MapDef) {
+  /** `extra`: additional static colliders (Zombies machines and boarded-up doorways). */
+  constructor(map: MapDef, extra: Omit<Box, 'id'>[] = []) {
     this.map = map;
     this.walls = computeWallBlocks(map);
     this.ceilings = computeCeilingBlocks(map);
@@ -58,6 +59,7 @@ export class World {
       const b = propBounds(p);
       this.collision.add({ ...b, surface: PROP_SURFACE[p.kind] ?? 'metal' });
     }
+    for (const b of extra) this.collision.add(b);
     this.collision.build(4);
     this.nav = new NavGrid(this.collision, { minX: ox, minZ: oz, maxX: ox + W, maxZ: oz + D }, 0.5);
   }

@@ -315,6 +315,17 @@ function accelerate(vel: Vector3, wishDir: Vector3, wishSpeed: number, accel: nu
   vel.x += acc * wishDir.x; vel.z += acc * wishDir.z;
 }
 
+/** Push a hull out of a box along whichever side needs the smallest move. */
+function depenetrate(p: Vector3, rx: number, rz: number, b: Box) {
+  const out = [
+    { x: true, v: b.minX - rx - 0.001, d: p.x + rx - b.minX },
+    { x: true, v: b.maxX + rx + 0.001, d: b.maxX - (p.x - rx) },
+    { x: false, v: b.minZ - rz - 0.001, d: p.z + rz - b.minZ },
+    { x: false, v: b.maxZ + rz + 0.001, d: b.maxZ - (p.z - rz) },
+  ].reduce((m, o) => (o.d < m.d ? o : m));
+  if (out.x) p.x = out.v; else p.z = out.v;
+}
+
 /** Move along X (axis 0) or Z (axis 2) with collision and step-up. */
 function moveAxis(world: CollisionWorld, s: MotorState, axis: 0 | 2, delta: number, height: number, canStep: boolean, stepHeight = MOVE.stepHeight as number) {
   if (delta === 0) return;
@@ -335,13 +346,14 @@ function moveAxis(world: CollisionWorld, s: MotorState, axis: 0 | 2, delta: numb
           break;
         }
       }
-      if (axis === 0) {
-        p.x = delta > 0 ? b.minX - r - 0.001 : b.maxX + r + 0.001;
-        s.vel.x = 0;
-      } else {
-        p.z = delta > 0 ? b.minZ - r - 0.001 : b.maxZ + r + 0.001;
-        s.vel.z = 0;
-      }
+      // Snap back to the face we moved into. If the hull already overlapped this box before the
+      // move (pushed in by a crowd, a stance change), that face can be metres away on the far
+      // side of a long wall — push out the shallowest way instead of tunnelling through it.
+      const from = (axis === 0 ? p.x : p.z) - delta;
+      const snapped = axis === 0 ? (delta > 0 ? b.minX - r - 0.001 : b.maxX + r + 0.001) : (delta > 0 ? b.minZ - r - 0.001 : b.maxZ + r + 0.001);
+      if (Math.abs(snapped - from) > Math.abs(delta) + 0.05) depenetrate(p, rx, rz, b);
+      else if (axis === 0) p.x = snapped; else p.z = snapped;
+      if (axis === 0) s.vel.x = 0; else s.vel.z = 0;
       resolved = true;
       break;
     }

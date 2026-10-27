@@ -1,6 +1,6 @@
 // Measures in-game FPS per quality preset over several samples.  node scripts/perf.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4175 }, logLevel: 'warn' });
@@ -9,7 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('text=Start match');
+await startFromMenu(page);
 await page.waitForSelector('.hud');
 const fps = () => page.evaluate(() => new Promise((res) => {
   let n = 0; const t0 = performance.now();

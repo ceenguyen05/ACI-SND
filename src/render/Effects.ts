@@ -7,7 +7,7 @@ import { Random } from '../core/Random';
 import { bloodSplat, bulletHole, flareSprite, softSprite } from './Textures';
 
 // ============================================================================ particles
-interface EmitOpts {
+export interface EmitOpts {
   pos: Vector3; count: number; speed: number; spread?: number; dir?: Vector3; life: [number, number];
   size: [number, number]; color: string; alpha?: number; gravity?: number; drag?: number; up?: number;
 }
@@ -256,6 +256,11 @@ export class Effects {
     this.sparks.emit({ pos, count: 30, speed: 8, life: [0.05, 0.2], size: [1.2, 0.2], color: '#ffffff' });
     this.lightFlash(pos, 0xffffff, 140, 0.25, 22);
   }
+
+  /** Generic soft puff (dust system: smoke, gas, debris). */
+  puff(o: EmitOpts) { this.dust.emit(o); }
+  /** Generic additive sparks (glows, embers, zaps). */
+  glow(o: EmitOpts) { this.sparks.emit(o); }
 
   pulseRing(pos: Vector3, color = '#30d0ff', maxR = 12) {
     const mesh = new Mesh(new RingGeometry(0.9, 1, 48), new MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: DoubleSide, blending: AdditiveBlending, depthWrite: false }));

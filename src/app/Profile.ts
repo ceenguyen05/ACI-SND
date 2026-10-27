@@ -3,6 +3,7 @@ import { DEFAULT_CROSSHAIR, OUTFITS, type AgentLook, type CrosshairSettings } fr
 import type { BotDifficulty } from '../config/difficulty';
 import type { MatchLength, Team } from '../config/rules';
 import type { WeaponId } from '../config/weapons';
+import type { ZDifficulty, ZLength } from '../config/zombies';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type AimAssist = 'off' | 'low' | 'medium' | 'high';
@@ -53,12 +54,22 @@ export interface MatchPrefs {
   killstreaks: boolean;
 }
 
+/** Zombies setup remembered between games. */
+export interface ZombiePrefs { players: 1 | 3 | 5; difficulty: ZDifficulty; length: ZLength }
+export interface ZombieStats {
+  games: number; kills: number; headshots: number; downs: number; revives: number; exfils: number;
+  /** Highest wave reached per difficulty. */
+  best: Partial<Record<ZDifficulty, number>>;
+}
+
 export interface Profile {
   name: string;
   looks: Record<Team, AgentLook>;
   finishes: Partial<Record<WeaponId, string>>;
   stats: { matches: number; wins: number; kills: number; deaths: number; mvps: number };
   match: MatchPrefs;
+  zombies: ZombiePrefs;
+  zstats: ZombieStats;
   settings: Settings;
 }
 
@@ -81,6 +92,8 @@ export function defaultProfile(): Profile {
     finishes: {},
     stats: { matches: 0, wins: 0, kills: 0, deaths: 0, mvps: 0 },
     match: { side: 'auto', teamSize: 5, difficulty: 'normal', length: 'short', freezeTime: 10, friendlyFire: false, killstreaks: true },
+    zombies: { players: 3, difficulty: 'normal', length: 'short' },
+    zstats: { games: 0, kills: 0, headshots: 0, downs: 0, revives: 0, exfils: 0, best: {} },
     settings: structuredClone(DEFAULT_SETTINGS),
   };
 }
@@ -97,6 +110,8 @@ export function loadProfile(): Profile {
       looks: { T: { ...base.looks.T, ...p.looks?.T }, CT: { ...base.looks.CT, ...p.looks?.CT } },
       stats: { ...base.stats, ...p.stats },
       match: { ...base.match, ...p.match },
+      zombies: { ...base.zombies, ...p.zombies },
+      zstats: { ...base.zstats, ...p.zstats, best: { ...base.zstats.best, ...p.zstats?.best } },
       settings: {
         ...base.settings, ...p.settings,
         // V became quick melee: older profiles had cameras on V, move them to T

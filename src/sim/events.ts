@@ -7,6 +7,7 @@ import type { SoundProfile, WeaponId } from '../config/weapons';
 import type { HitGroup } from './entities/Agent';
 import type { SurfaceKind } from './physics/CollisionWorld';
 import type { SiteId } from './world/MapTypes';
+import type { PerkId, PowerUpId, WaveKind, ZombieKind } from '../config/zombies';
 
 export type RoundEndReason = 'elimination' | 'bomb' | 'defuse' | 'time';
 
@@ -76,4 +77,29 @@ export interface SimEvents {
   heartbeatScan: { agentId: number; count: number };
   teamPing: { agentId: number; team: Team; pos: Vector3; enemyId: number | null };
   attachment: { agentId: number; weapon: WeaponId; id: string; fitted: boolean };
+  // ---- Zombies
+  zWave: { wave: number; kind: WaveKind; state: 'start' | 'end'; count: number; bonus: number };
+  zSpawn: { id: number; kind: ZombieKind; pos: Vector3 };
+  zVoice: { id: number; kind: 'groan' | 'growl' | 'scream' | 'roar' | 'fuse' | 'spit' | 'shriek' | 'death'; pos: Vector3; zombie: ZombieKind };
+  zSwipe: { id: number; targetId: number; hit: boolean };
+  zPoints: { agentId: number; amount: number; reason: string };
+  zBuy: { agentId: number; kind: string; name: string; price: number };
+  zDenied: { agentId: number; reason: string };
+  zDoor: { gateId: string; byId: number; pos: Vector3 };
+  zPower: { byId: number };
+  zPerk: { agentId: number; perk: PerkId; gained: boolean };
+  zBox: { state: 'spin' | 'ready' | 'taken' | 'expired' | 'teddy' | 'moved'; weapon: WeaponId | null; byId: number; spot: number };
+  zForge: { state: 'start' | 'ready' | 'taken' | 'expired'; byId: number; weapon: WeaponId };
+  zPowerUp: { id: number; kind: PowerUpId; state: 'drop' | 'grab' | 'expire' | 'end'; byId: number; pos: Vector3 };
+  zDowned: { agentId: number; self: boolean };
+  zRevived: { agentId: number; byId: number; self: boolean };
+  zBleedOut: { agentId: number };
+  zRespawn: { agentId: number };
+  zHazard: { kind: 'gas' | 'acid' | 'spit'; pos: Vector3; to?: Vector3 };
+  zBlast: { kind: 'bomber' | 'lure' | 'shock' | 'slam' | 'nuke'; pos: Vector3; radius: number };
+  zArmor: { id: number; part: 'helmet' | 'vest' };
+  zTank: { id: number; state: 'roar' | 'charge' | 'dazed' | 'slam' };
+  zExfil: { state: 'available' | 'called' | 'holding' | 'extracted' | 'failed'; until: number };
+  zGameOver: { wave: number; won: boolean };
+  zArmory: { agentId: number };
 }

@@ -21,6 +21,13 @@ const polymer = () => mat('w:poly', () => new MeshStandardMaterial({ color: '#2a
 const glassM = () => mat('w:glass', () => new MeshStandardMaterial({ color: '#203040', roughness: 0.05, metalness: 0.9 }));
 
 export function finishMaterial(finishId: string | undefined): Material {
+  if (finishId === 'forged') {
+    // Prototype Forge upgrade: a shifting violet/cyan energy camo that glows in the dark
+    return mat('finish:forged', () => new MeshStandardMaterial({
+      map: finishTexture('forged', '#24123a', '#a060ff', 'hex'), emissive: new Color('#5a28d0'), emissiveIntensity: 0.55,
+      roughness: 0.28, metalness: 0.75, normalMap: surfaceDetail(TEX.metal()).normal,
+    }));
+  }
   const f = FINISHES.find((x) => x.id === finishId) ?? FINISHES[0];
   return mat('finish:' + f.id, () => new MeshStandardMaterial({
     map: finishTexture(f.id, f.base, f.accent, f.pattern), roughness: 0.5 - f.metal * 0.3, metalness: f.metal,
@@ -288,6 +295,23 @@ function rpg(skin: Material): Group {
   return g;
 }
 
+/** ACI R&D "Disruptor": a compact plasma gun with glowing coils; the energy cell is the "magazine". */
+function disruptor(skin: Material): Group {
+  const g = new Group();
+  const mag = magazine(g);
+  const coil = mat('w:plasma', () => new MeshStandardMaterial({ color: '#1e4a18', emissive: new Color('#6aff3a'), emissiveIntensity: 1.8, roughness: 0.3 }));
+  part(g, skin, 0.072, 0.095, 0.27, 0, 0.05, -0.07);
+  cyl(g, black(), 0.034, 0.24, 0, 0.062, -0.31, 18);
+  for (const z of [-0.23, -0.29, -0.35]) cyl(g, coil, 0.042, 0.018, 0, 0.062, z, 18);
+  cyl(g, steel(), 0.05, 0.035, 0, 0.062, -0.44, 18, 0.032);
+  part(mag, coil, 0.042, 0.085, 0.055, 0, -0.03, -0.03);
+  part(g, polymer(), 0.036, 0.105, 0.045, 0, -0.045, 0.055, 0.25);
+  part(g, skin, 0.028, 0.045, 0.15, 0, 0.118, -0.06);
+  part(g, black(), 0.012, 0.006, 0.06, 0, -0.02, 0.0);
+  g.userData.muzzle = new Vector3(0, 0.062, -0.46);
+  return g;
+}
+
 /** Steel crowbar (used for prying barricades and as the quick-melee tool when owned). */
 export function crowbarModel(): Group {
   const g = new Group();
@@ -461,6 +485,7 @@ export function weaponModel(id: WeaponId, finishId?: string, att = ''): Group {
     case 'anvil': g = lmg(skin, true); break;
     case 'thumper': g = thumper(skin); break;
     case 'hammer': g = rpg(skin); break;
+    case 'disruptor': g = disruptor(skin); break;
     case 'breacher': g = shotgun(skin); break;
     case 'galeforce': g = rifle(skin, { recv: 0.3, barrel: 0.22, hand: 0.2, stock: 'skeleton', mag: 'curved', muzzle: 'brake' }); break;
     case 'tempest': g = rifle(skin, { recv: 0.36, barrel: 0.18, hand: 0.12, stock: 'bullpup', mag: 'straight', handle: true }); break;

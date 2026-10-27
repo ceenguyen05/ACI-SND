@@ -38,6 +38,10 @@ export interface MatchConfig {
   playerName: string;
   playerLook: Record<Team, AgentLook>;
   seed?: number;
+  /** Extra static colliders for the mode (Zombies machines and boarded-up doorways). */
+  worldExtras?: Omit<import('../physics/CollisionWorld').Box, 'id'>[];
+  /** 'zombies' skips the Search & Destroy roster and round setup (ZombiesMatch builds its own). */
+  mode?: 'snd' | 'zombies';
 }
 
 const BOT_NAMES = ['Rivet', 'Torque', 'Gasket', 'Sprocket', 'Ratchet', 'Flux', 'Solder', 'Piston', 'Dowel', 'Ledger',
@@ -58,7 +62,7 @@ export class Match implements SimContext, MatchQuery {
   readonly agents: Agent[] = [];
   readonly bots = new Map<number, BotController>();
   readonly coaches: Record<Team, TeamCoach>;
-  readonly player: Agent | null;
+  player: Agent | null = null;
   difficulty: BotDifficulty;
 
   time = 0;
@@ -76,23 +80,24 @@ export class Match implements SimContext, MatchQuery {
   bomb: BombState = { state: 'none', carrierId: null, pos: new Vector3(), vel: new Vector3(), site: null, plantedAt: 0, plantedBy: null, defuserId: null, nextBeep: 0, spottedByCT: -10 };
   lastRoundEnd: { winner: Team; reason: RoundEndReason; mvpId: number | null } | null = null;
 
-  private playerCmd: AgentCommand = emptyCommand();
+  protected playerCmd: AgentCommand = emptyCommand();
   private pendingHalftime = false;
-  private losCache = new Map<number, boolean>();
+  protected losCache = new Map<number, boolean>();
   private nextItemId = 1;
   private plantedThisRound = false;
-  private prevUse = new Map<number, boolean>();
+  protected prevUse = new Map<number, boolean>();
 
   constructor(cfg: MatchConfig) {
     this.rules = { ...DEFAULT_RULES, ...cfg.rules };
     this.rng = new Random(cfg.seed ?? (Math.random() * 1e9) | 0);
-    this.world = new World(cfg.map);
+    this.world = new World(cfg.map, cfg.worldExtras);
     this.difficulty = cfg.difficulty;
     this.utility.attach(this);
     this.gadgets.attach(this);
     this.ordnance.attach(this);
     this.killstreaks = new Killstreaks(this);
     this.coaches = { T: new TeamCoach('T', this, this.bots), CT: new TeamCoach('CT', this, this.bots) };
+    if (cfg.mode === 'zombies') return;
 
     const names = this.rng.shuffle([...BOT_NAMES]);
     const randomLook = (): Record<Team, AgentLook> => ({
@@ -139,7 +144,7 @@ export class Match implements SimContext, MatchQuery {
   setDifficulty(d: BotDifficulty) { this.difficulty = d; for (const b of this.bots.values()) b.setDifficulty(d); }
 
   los(o: Agent, t: Agent): boolean {
-    const key = o.id * 1000 + t.id;
+    const key = o.id * 65536 + t.id;
     const v = this.losCache.get(key);
     if (v !== undefined) return v;
     const r = this.computeLos(o, t);
@@ -147,7 +152,7 @@ export class Match implements SimContext, MatchQuery {
     return r;
   }
 
-  private computeLos(o: Agent, t: Agent): boolean {
+  protected computeLos(o: Agent, t: Agent): boolean {
     if (!o.alive || !t.alive) return false;
     const eye = o.eyePos(new Vector3());
     if (eye.distanceTo(t.pos) > 90) return false;
@@ -196,7 +201,7 @@ export class Match implements SimContext, MatchQuery {
    * Tactical lights: an enemy inside the beam (14 m, ~11° cone) who is looking back toward it
    * gets glare – the player sees a bright flare, bots aim slower.
    */
-  private updateWeaponLights() {
+  protected updateWeaponLights() {
     const now = this.time;
     for (const a of this.agents) {
       if (!a.alive || !a.lightOn || a.operating !== null || !a.activeWeapon()?.def.mods?.light) continue;
@@ -376,7 +381,7 @@ export class Match implements SimContext, MatchQuery {
   }
 
   // ===================================================================== rounds
-  private startRound(first = false) {
+  protected startRound(first = false) {
     if (this.pendingHalftime) this.doHalftime();
     this.round++;
     this.phase = 'freeze';
@@ -476,13 +481,13 @@ export class Match implements SimContext, MatchQuery {
     this.phaseEnd = this.time + this.rules.roundEndDelay;
   }
 
-  private addMoney(a: Agent, amount: number, reason: string) {
+  protected addMoney(a: Agent, amount: number, reason: string) {
     const before = a.money;
     a.money = clamp(a.money + amount, 0, this.rules.maxMoney);
     if (a.money !== before) this.events.emit('money', { agentId: a.id, amount: a.money - before, reason });
   }
 
-  private kill(victim: Agent, attacker: Agent | null, source: string, headshot: boolean, dir: Vector3, wallbang = false) {
+  protected kill(victim: Agent, attacker: Agent | null, source: string, headshot: boolean, dir: Vector3, wallbang = false) {
     victim.alive = false;
     victim.health = 0;
     victim.deathTime = this.time;
@@ -584,9 +589,9 @@ export class Match implements SimContext, MatchQuery {
     this.checkWin();
   }
 
-  private prevFire = new Map<number, boolean>();
+  protected prevFire = new Map<number, boolean>();
 
-  private applyCommand(a: Agent, cmd: AgentCommand, dt: number) {
+  protected applyCommand(a: Agent, cmd: AgentCommand, dt: number) {
     a.cmd = cmd;
     const decay = Math.exp(-dt * 10);
     a.flinchPitch *= decay; a.flinchYaw *= decay;
@@ -597,8 +602,8 @@ export class Match implements SimContext, MatchQuery {
       a.heals = a.heals.filter((h) => h.until > this.time);
       a.healAcc += a.heals.reduce((s, h) => s + h.rate, 0) * dt;
       const whole = Math.floor(a.healAcc);
-      if (whole > 0) { a.health = Math.min(100, a.health + whole); a.healAcc -= whole; }
-      if (a.health >= 100) a.healAcc = 0;
+      if (whole > 0) { a.health = Math.min(a.maxHealth, a.health + whole); a.healAcc -= whole; }
+      if (a.health >= a.maxHealth) a.healAcc = 0;
     }
     // ---- camera / drone feeds -------------------------------------------------------
     const steering = this.gadgets.get(a.operating)?.kind === 'missile'; // no bailing out of a missile
@@ -679,7 +684,7 @@ export class Match implements SimContext, MatchQuery {
     if (a.flashUntil <= this.time) a.flashStrength = 0;
   }
 
-  private updatePlantDefuse(a: Agent, cmd: AgentCommand, dt: number) {
+  protected updatePlantDefuse(a: Agent, cmd: AgentCommand, dt: number) {
     const bomb = this.bomb;
     // planting
     if (a.team === 'T' && a.active === 'bomb' && a.hasBomb) {
@@ -746,7 +751,7 @@ export class Match implements SimContext, MatchQuery {
   }
 
   /** "Use" key: swap-pick-up the weapon you're looking at. */
-  private updateUse(a: Agent, cmd: AgentCommand) {
+  protected updateUse(a: Agent, cmd: AgentCommand) {
     const pressed = cmd.use && !this.prevUse.get(a.id);
     this.prevUse.set(a.id, cmd.use);
     // crowbar: hold use on a barricade to pry it off
@@ -785,7 +790,7 @@ export class Match implements SimContext, MatchQuery {
     if (best) this.pickUp(a, best, true);
   }
 
-  private pickUp(a: Agent, it: DroppedItem, swap: boolean) {
+  protected pickUp(a: Agent, it: DroppedItem, swap: boolean) {
     const slot = it.weapon.def.slot === 'primary' ? 'primary' : 'secondary';
     if (a[slot] && !swap) return;
     const old = a[slot];
@@ -796,7 +801,7 @@ export class Match implements SimContext, MatchQuery {
     this.events.emit('pickup', { agentId: a.id, item: it.weapon.def.id });
   }
 
-  private updateItems(dt: number) {
+  protected updateItems(dt: number) {
     const col = this.world.collision;
     const settle = (pos: Vector3, vel: Vector3) => {
       if (vel.lengthSq() === 0) return;
@@ -831,7 +836,7 @@ export class Match implements SimContext, MatchQuery {
     }
   }
 
-  private updateBomb(dt: number) {
+  protected updateBomb(dt: number) {
     const bomb = this.bomb;
     void dt;
     if (bomb.state !== 'planted') return;
@@ -859,7 +864,7 @@ export class Match implements SimContext, MatchQuery {
     }
   }
 
-  private updateSpotting() {
+  protected updateSpotting() {
     const now = this.time;
     for (const o of this.agents) {
       if (!o.alive) continue;
@@ -880,7 +885,7 @@ export class Match implements SimContext, MatchQuery {
     }
   }
 
-  private checkWin() {
+  protected checkWin() {
     if (this.phase !== 'live' && this.phase !== 'planted') return;
     const tAlive = this.agents.some((a) => a.alive && a.team === 'T');
     const ctAlive = this.agents.some((a) => a.alive && a.team === 'CT');

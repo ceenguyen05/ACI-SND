@@ -1,7 +1,7 @@
 // Visual review helper: tours the map and the weapon view-models and saves screenshots.
 //   node scripts/screenshots.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots/tour';
@@ -18,8 +18,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(url);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 await page.evaluate(() => {
   const { match, session } = window.__aci;

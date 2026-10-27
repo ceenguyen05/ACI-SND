@@ -2,7 +2,7 @@
 // stun, kill feed icons, multi-kill banner and the final killcam.
 //   node scripts/moments-look.mjs [--no-build] [--only=vm,gear,kill]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split(',');
@@ -19,8 +19,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 await page.evaluate(() => {
   const { app, match, session } = window.__aci;

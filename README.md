@@ -1,4 +1,4 @@
-# ACI: Search & Destroy
+# ACI: Series 1
 
 [![CI](https://github.com/ceenguyen05/ACI-SND/actions/workflows/ci.yml/badge.svg)](https://github.com/ceenguyen05/ACI-SND/actions/workflows/ci.yml)
 [![Deploy](https://github.com/ceenguyen05/ACI-SND/actions/workflows/deploy.yml/badge.svg)](https://github.com/ceenguyen05/ACI-SND/actions/workflows/deploy.yml)
@@ -6,19 +6,25 @@
 **▶ Play in the browser: https://ceenguyen05.github.io/ACI-SND/** (the latest `main`, deployed
 automatically)
 
-A tactical first-person shooter in the style of CS:GO / CS2, playing **Search & Destroy (bomb
-defusal)** on one original map: **ACI HQ**. ACI HQ is a single-story building where the west
-half is offices (meeting rooms, engineering cubicles, B-site bullpen) and the east half is
-manufacturing (A-site assembly line, factory floor, warehouse, shipping docks).
+A first-person shooter with two game modes on one original map, **ACI HQ**. ACI HQ is a
+single-story building where the west half is offices (meeting rooms, engineering cubicles,
+B-site bullpen) and the east half is manufacturing (A-site assembly line, factory floor,
+warehouse, shipping docks).
+
+* **Search & Destroy:** CS:GO / CS2-style bomb defusal against bots, in teams of 1v1 up to 5v5.
+* **Zombies (ACI HQ: Outbreak):** Call of Duty-style round-based survival for squads of 1, 3
+  or 5 (your teammates are bots). Start with a knife and a pistol and earn your way to perks,
+  wonder weapons and an exfil. See [docs/ZOMBIES.md](docs/ZOMBIES.md).
 
 It runs in the browser using TypeScript, Three.js and Vite. Models, animation and audio are
 generated in code, with three locally bundled CC0 scanned surface sets for the buildings.
-Version 1 is **offline, you vs. bots**, in teams of 1v1 up to 5v5.
+Everything is **offline, with bots**.
 
 | Topic | Document |
 |---|---|
 | Development plan | [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) |
 | Game design (rules, weapons, economy, bots) | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) |
+| Zombies mode (waves, zombie types, perks, prices, exfil, research) | [docs/ZOMBIES.md](docs/ZOMBIES.md) |
 | Map layout and callouts | [docs/MAP.md](docs/MAP.md) |
 | Movement and visual overhaul | [docs/POLISH.md](docs/POLISH.md) |
 | Art sources and licenses | [docs/ASSETS.md](docs/ASSETS.md) |
@@ -41,8 +47,16 @@ npm install          # once
 npm run dev          # starts http://localhost:5173 and opens the browser
 ```
 
-Click the title screen, go to **Play → Start match**, then click the game window to capture
-the mouse. Press **Esc** at any time to pause and release the mouse.
+Click the title screen. The main menu has **Play Now**, **Settings** and **About** (arrow keys and
+Enter work too), plus quick links to **Operators** (character customization), **Loadout** and
+**How to play**.
+
+1. **Play Now** opens the mode select. Pick **Search & Destroy** or **Zombies**.
+2. Set up the match (S&D: side, team size, difficulty, length; Zombies: squad, difficulty,
+   game length).
+3. Press **Start match**, or **Watch bots** to spectate.
+4. Click the game window to capture the mouse. Press **Esc** at any time to pause and release
+   it.
 
 To build a production version to host anywhere:
 
@@ -87,6 +101,14 @@ naturally, reduces accuracy and has a cooldown, so it can't be chained for a spe
 Both actions follow your custom bindings.
 Saved profiles that still have cameras on V are moved to T automatically, because V is now quick melee.
 
+**In Zombies** the Use key (**F**) buys:
+
+* At a wall weapon, a shutter, a perk machine, the Mystery Box, the Prototype Forge or the
+  power switch, it buys or uses it.
+* At the Armory, it opens the Armory menu (number keys buy).
+* Next to a downed teammate, hold it to revive them.
+* **Tab** shows the squad board.
+
 **Aim assist** (Settings → Game): Off / Low (default) / Medium / High. Your crosshair slows
 down over a visible enemy, and you get a gentle, speed-limited pull toward their upper chest
 while you move the mouse or strafe. Walls, smoke, flashes and teammates switch it off, and it
@@ -94,7 +116,46 @@ never applies to bots.
 
 ## Features
 
-**Gameplay**
+**Zombies: ACI HQ: Outbreak** (full design: [docs/ZOMBIES.md](docs/ZOMBIES.md))
+* **Round-based CoD-style waves.** Wave counts, health, spawn rate and the walk → run → sprint
+  speed ramp come from the Black Ops 2 zombies scripts.
+* **Specials:** frenzy waves (sprinters, crawlers and bombers, ending in a Max Ammo) and
+  Juggernaut boss waves.
+* **Ten zombie types:**
+  * Shambler, Sprinter and Crawler.
+  * Brute.
+  * Bloater: a gas cloud when it dies.
+  * Bomber: explodes and wrecks wire.
+  * Spitter: acid pools.
+  * Firefighter: an armored helmet and plates you shoot off.
+  * Shrieker: enrages the horde and calls more.
+  * Juggernaut boss: charge, ground slam, and dazed into double damage.
+* **Squads of 1, 3 or 5.** Bot teammates revive you, kite, prioritise threats, grab power-ups
+  and buy their own perks and guns.
+* **Points:** 10 per hit, 50–130 per kill and a wave-clear bonus. Start with a knife and a
+  pistol.
+* **Buying:**
+  * 15 shutters unlock 8 zones of ACI HQ.
+  * 14 wall weapons.
+  * The Mystery Box (with the teddy-bear move rule and the **Disruptor** plasma wonder
+    weapon).
+  * The **Prototype Forge** (Pack-a-Punch style upgrades with a glowing camo).
+  * 8 perks (4 at a time) that need the power switched on.
+  * The **Armory:** armor, frags, stuns, Molotovs, lure beacons, trip mines, wire, barricades,
+    stims, an ammo crate, a self-revive kit.
+* **Power-ups:** Max Ammo, Insta-Kill, Double Points, Nuke, Carpenter, Fire Sale, Bonus Points.
+* **Going down:** downed players shoot their pistol and wait for a revive, or bleed out and
+  return next wave. Solo players start with one free self-revive.
+* **Exfil to win** (Short: from wave 10, Long: from wave 20): call the chopper on the lobby
+  radio, reach the landing zone and hold it. Endless mode has no way out.
+* **Four difficulties** (Casual → Nightmare). Your best wave per difficulty is saved.
+* **Mood:** the building is dim until you turn the power on, and frenzy waves turn the air
+  red. Groans, screams, roars, a music-box Mystery Box and perk jingles are all synthesized.
+* **Zombies HUD:** a CoD-style wave counter (tally marks for 1–5), squad points with "+10"
+  popups, perk icons, power-up timers, prompts with prices, revive and bleed-out bars, a boss
+  health bar and an exfil objective.
+
+**Search & Destroy gameplay**
 * CS2 competitive rules: freeze time, 20 s buy time, 1:55 rounds, 40 s bomb timer, 3.2 s plant,
   and 10 s defuse (5 s with a kit).
 * Halftime side swap; MR4, MR8 or MR12 match lengths.
@@ -186,9 +247,13 @@ never applies to bots.
 * Four difficulty levels.
 
 **Presentation**
-* CS-style menus:
-  * Title screen with a fly-through of the map.
-  * **Agents:** six presets plus full color, gear and headgear customization, with a live 3D
+* Menus:
+  * Animated **ACI: Series 1** title over a fly-through of the map.
+  * Main menu with **Play Now / Settings / About**: staggered slide-ins, hover sweeps, mouse
+    parallax, keyboard navigation, a featured Zombies card and career stats.
+  * **Mode select:** two big 3D-tilting cards (Search & Destroy, Zombies). Picking one slides
+    in its setup, with your operator or a zombie posing behind it.
+  * **Operators:** six presets plus full color, gear and headgear customization, with a live 3D
     preview.
   * **Loadout:** ten weapon finishes per weapon, with a rotating 3D preview.
   * **Settings:** sensitivity, FOV, audio, graphics presets, key rebinding, and a crosshair
@@ -253,6 +318,7 @@ ACI-SND/
 │  ├─ core/                # engine-agnostic helpers: math, seeded RNG, typed EventBus
 │  ├─ sim/                 # deterministic game simulation (no DOM/WebGL; runs in Node tests)
 │  │  ├─ maps/aciHq.ts     #   the map: grid, doors, props, spawns, sites, AI data
+│  │  ├─ maps/aciHqZombies.ts # Zombies layout: zones, shutters, wall-buys, machine spots
 │  │  ├─ world/            #   MapDef types; World = colliders + nav + zone queries
 │  │  ├─ physics/          #   AABB collision world (grid + DDA raycast), Source-style motor
 │  │  ├─ entities/         #   Agent (player/bot state, inventory, hitboxes, commands)
@@ -262,6 +328,8 @@ ACI-SND/
 │  │  ├─ gadget/           #   drones, cameras, CCTV, trip mines, wire, shields, EMP
 │  │  ├─ ai/               #   NavGrid + A*, BotController, TeamCoach, BotBuy
 │  │  ├─ mode/             #   Match (S&D rules, rounds, bomb, economy), Economy, Killstreaks, types
+│  │  ├─ zombies/          #   ZombiesMatch (waves, zombie AI, points, machines, downs, exfil),
+│  │  │                    #   AllyBot, FlowField (horde pathfinding), zweapons, types
 │  │  ├─ events.ts         #   simulation event types (consumed by render/audio/UI)
 │  │  └─ SimContext.ts
 │  ├─ render/              # Three.js presentation
@@ -272,6 +340,8 @@ ACI-SND/
 │  │  ├─ Materials.ts      #   material library, geometry batching/merging
 │  │  ├─ Textures.ts       #   procedural canvas textures (incl. weapon finishes)
 │  │  ├─ CharacterModel.ts #   animated humanoid agents
+│  │  ├─ ZombieModel.ts    #   procedural zombies (10 kinds) and their animation
+│  │  ├─ ZombiesModels.ts, ZombiesView.ts # machines, shutters, power-ups, hazards, chopper
 │  │  ├─ WeaponModels.ts   #   procedural weapons, grenades, bomb
 │  │  ├─ GadgetModels.ts   #   drones, cameras, mine, wire, shield, stim, C4, barricades, killstreaks
 │  │  ├─ ViewModel.ts      #   first-person arms/weapon animation
@@ -279,13 +349,15 @@ ACI-SND/
 │  │  └─ MatchView.ts      #   binds a Match to visuals/audio; camera; interpolation
 │  ├─ audio/Sfx.ts         # WebAudio synthesizer for every sound
 │  └─ ui/                  # DOM UI
-│     ├─ screens/          #   title, main menu (play/agents/loadout/help), settings panel
-│     ├─ hud/              #   HUD, radar, crosshair, buy menu, scoreboard, pause, match end
+│     ├─ screens/          #   title, main menu (home/operators/loadout/settings/about/help), ModeSelect
+│     ├─ hud/              #   HUD, radar, crosshair, buy menu, scoreboard, pause, match end,
+│     │                    #   ZombiesHUD, Armory menu, zombies scoreboard / end screen
 │     ├─ components.ts, dom.ts
 │     └─ styles/main.css
 ├─ tests/                  # Vitest: map validity, physics, combat, economy, full bot matches
 ├─ scripts/
-│  ├─ boot-check.mjs       # CI: boots the build from /ACI-SND/ like GitHub Pages
+│  ├─ boot-check.mjs       # CI: boots S&D and Zombies from /ACI-SND/ like GitHub Pages
+│  ├─ zombies-look.mjs     # Zombies browser run + screenshots (npm run test:zombies)
 │  ├─ lib/browser.mjs      # shared Chromium launch (GPU locally, SwiftShader on CI)
 │  ├─ smoke-test.mjs       # headless Chromium end-to-end test + screenshots
 │  ├─ bake-lighting.mjs    # offline lightmap + probe baker (npm run bake)
@@ -308,9 +380,9 @@ multiplayer server unchanged.
 | Command | What it does |
 |---|---|
 | `npm run check` | Typecheck + tests + production build: exactly what CI runs on every push |
-| `npm run check:boot` | Serves the build from `/ACI-SND/` (like GitHub Pages), boots it in headless Chromium, starts a match and fails on any missing file or error. Runs in CI; needs a build first |
+| `npm run check:boot` | Serves the build from `/ACI-SND/` (like GitHub Pages), boots it in headless Chromium, starts a Search & Destroy match and a Zombies game, and fails on any missing file or error. Runs in CI; needs a build first |
 | `npm run typecheck` | Strict TypeScript checks |
-| `npm test` | 130 unit and simulation tests (plus an optional balance report), including prone and slide (clearance, hitboxes, crouch modes), Gunsmith attachments, rebuy/auto-buy, mantling, coyote time, burst fire, stun, throwing knives, the heartbeat sensor, pings and killcam recording, including movement (crouch-jump, stamina), wallbangs, foot placement, weapon handling, input buffering, aim assist, every gadget, the stim pistol, barricades, launchers, C4 and killstreaks. They cover map connectivity, prop/wall overlap, raycasts, damage/armor, spray patterns, economy, and **complete bot-vs-bot matches** (rounds, plants, halftime swap, money limits) |
+| `npm test` | 146 unit and simulation tests: 16 Zombies tests (formulas, layout validity, waves, points, purchases, perks, revives, specials, power-ups, box and forge, every zombie kind, a bot squad, motor tunnelling) plus the Search & Destroy suite (plus an optional balance report), including prone and slide (clearance, hitboxes, crouch modes), Gunsmith attachments, rebuy/auto-buy, mantling, coyote time, burst fire, stun, throwing knives, the heartbeat sensor, pings and killcam recording, including movement (crouch-jump, stamina), wallbangs, foot placement, weapon handling, input buffering, aim assist, every gadget, the stim pistol, barricades, launchers, C4 and killstreaks. They cover map connectivity, prop/wall overlap, raycasts, damage/armor, spray patterns, economy, and **complete bot-vs-bot matches** (rounds, plants, halftime swap, money limits) |
 | `npm run smoke` | Builds, serves, and drives the real game in headless Chromium: title → every menu page → start match → buy menu purchase → quality presets with FPS readout → an accelerated all-bot match until it ends. Fails on any console error and saves screenshots to `screenshots/` |
 | `npm run screenshots` | Visual tour of 16 map locations and 8 view models (`screenshots/tour/`) |
 | `npm run perf` | FPS per graphics preset on your GPU |
@@ -324,6 +396,8 @@ multiplayer server unchanged.
 | `node scripts/gunsmith-look.mjs` | Buys and fits attachments through the real buy menu, then screenshots the Gunsmith tab, a kitted rifle, red-dot / holo / ACOG aiming, an enemy laser and an enemy light (`screenshots/gunsmith/`) |
 | `node scripts/moments-look.mjs` | Screenshots of the new guns, gear, heartbeat screen, pings, stun, multi-kill banner and the killcam, then checks the next round starts (`screenshots/moments/`) |
 | `npm run balance [difficulty] [seeds]` | Win-rate and kill statistics over ~60 simulated rounds |
+| `npm run test:zombies` | Plays Zombies in the browser through the new menus with a bot squad, then stages every zombie type, the machines, power-ups, hazards, downed / revive, armory, exfil and end screen; reports horde FPS and fails on console errors (`screenshots/zombies/`) |
+| `SOAK=1 npx vitest run tests/zombies-soak.test.ts --silent=false` | Long all-bot Zombies games: progression, per-system timings, no stalled waves, nobody stuck in a closed area |
 | `npm run verify` | Full pre-release pass: `check` + `check:boot` + smoke test + real-key check (needs a GPU) |
 
 `npx playwright install chromium` downloads the headless browser that the smoke test uses. It

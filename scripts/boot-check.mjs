@@ -13,7 +13,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 
 const OUT = 'screenshots/boot';
 mkdirSync(OUT, { recursive: true });
@@ -68,7 +68,7 @@ const step = async (name, fn) => {
 try {
   await step('title screen', async () => { await page.goto(url); await page.waitForSelector('.title-screen'); });
   await step('main menu', async () => { await page.keyboard.press('Enter'); await page.waitForSelector('.menu'); });
-  await step('start a match', async () => { await page.click('text=Start match'); await page.waitForSelector('.hud'); });
+  await step('start a match', async () => { await startFromMenu(page); await page.waitForSelector('.hud'); });
   await step('simulate 10 s of the round', async () => {
     const st = await page.evaluate(() => {
       const { match } = window.__aci;
@@ -80,6 +80,19 @@ try {
     if (st.agents < 2 || st.round < 1 || !(st.time > 9)) errors.push('simulation did not advance: ' + JSON.stringify(st));
   });
   await step('render + screenshot', async () => { await page.screenshot({ path: `${OUT}/boot.png`, timeout: 180_000 }); });
+  // Zombies boots too: back to the menu, start a game, simulate the first wave
+  await step('back to the menu', async () => { await page.evaluate(() => window.__aci.session.quit()); await page.waitForSelector('.mm-home'); });
+  await step('start zombies', async () => { await startFromMenu(page, 'zombies'); await page.waitForSelector('.zhud'); });
+  await step('simulate 20 s of zombies', async () => {
+    const st = await page.evaluate(() => {
+      const { match } = window.__aci;
+      for (let i = 0; i < 64 * 20; i++) match.step(1 / 64);
+      return { wave: match.wave, spawned: match.spawned, zombies: match.zombiePool.length, humans: match.humans.length, time: match.time };
+    });
+    console.log('    state', JSON.stringify(st));
+    if (st.wave < 1 || st.spawned < 1 || st.humans < 1) errors.push('zombies did not start: ' + JSON.stringify(st));
+  });
+  await step('render zombies + screenshot', async () => { await page.screenshot({ path: `${OUT}/boot-zombies.png`, timeout: 180_000 }); });
 } catch (e) {
   errors.push('boot check error: ' + (e.stack || e));
   await page.screenshot({ path: `${OUT}/failure.png`, timeout: 60_000 }).catch(() => {});

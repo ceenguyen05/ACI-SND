@@ -15,10 +15,15 @@ import type { Match } from '../sim/mode/Match';
 import { VIEW_PUNCH_FRACTION } from '../sim/combat/recoil';
 import { sfx } from '../audio/Sfx';
 import { CharacterModel } from './CharacterModel';
+import { ZombieModel } from './ZombieModel';
 import type { GameRenderer } from './Renderer';
 import { bombModel, grenadeModel, weaponModel } from './WeaponModels';
 
-interface CharEntry { model: CharacterModel; prev: Vector3; cur: Vector3; xray: Group; firing: number; light: Color; hitAt: number; throwAt: number; shadow: Mesh }
+interface CharEntry {
+  model: CharacterModel | ZombieModel; prev: Vector3; cur: Vector3; xray: Group; firing: number; light: Color; hitAt: number; throwAt: number; shadow: Mesh;
+  /** Zombies: pool generation seen, last AI mode, and when the last swipe landed. */
+  gen: number; lastMode: string; strikeAt: number;
+}
 
 const lerpAngle = (a: number, b: number, t: number) => a + wrapAngle(b - a) * t;
 const v3 = (v: Vector3): [number, number, number] => [v.x, v.y, v.z];
@@ -91,7 +96,11 @@ export class MatchView {
   onLocalStun: (strength: number, duration: number) => void = () => {};
   freeCam: { pos: Vector3; yaw: number; pitch: number } | null = null;
 
+  /** Zombies mode: no killcam recording, zombie models and sounds. */
+  private readonly zombies: boolean;
+
   constructor(private r: GameRenderer, private match: Match, private finishes: Partial<Record<WeaponId, string>>, private settings: () => ViewSettings) {
+    this.zombies = match.agents.some((a) => a.zombie) || 'zombiePool' in match;
     r.scene.add(this.root);
     this.bomb = bombModel();
     this.bomb.visible = false;
@@ -102,7 +111,7 @@ export class MatchView {
   }
 
   private addChar(a: Agent) {
-    const model = new CharacterModel(a.look[a.team]);
+    const model = a.zombie ? new ZombieModel() : new CharacterModel(a.look[a.team]);
     const xray = new Group();
     const xm = new MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.55, depthTest: false });
     for (let i = 0; i < 4; i++) {
@@ -113,7 +122,7 @@ export class MatchView {
     const shadow = new Mesh(SHADOW_GEO, shadowMat);
     shadow.renderOrder = 1;
     this.root.add(model.root, xray, shadow);
-    this.chars.set(a.id, { model, prev: a.pos.clone(), cur: a.pos.clone(), xray, firing: 0, light: new Color(1, 1, 1), hitAt: -10, throwAt: -10, shadow });
+    this.chars.set(a.id, { model, prev: a.pos.clone(), cur: a.pos.clone(), xray, firing: 0, light: new Color(1, 1, 1), hitAt: -10, throwAt: -10, shadow, gen: -1, lastMode: '', strikeAt: -10 });
   }
 
   private heldKey(a: Agent): string {
@@ -122,7 +131,8 @@ export class MatchView {
     if (a.active === 'gadget' && a.activeGadget) return 'd:' + a.activeGadget;
     const w = a.activeWeapon();
     if (!w) return '';
-    return `w:${w.def.id}:${a.isBot ? '' : this.finishes[w.def.id] ?? ''}:${loadoutKey(w.att)}`;
+    const finish = (w.def.tier ?? 0) > 0 ? 'forged' : a.isBot ? '' : this.finishes[w.def.id] ?? '';
+    return `w:${w.def.id}:${finish}:${loadoutKey(w.att)}`;
   }
 
   // ------------------------------------------------------------------ events → fx/audio
@@ -181,6 +191,12 @@ export class MatchView {
       if (isView(e.victimId)) { sfx.death(); this.deathCamYaw = null; }
     });
     on('footstep', (e) => {
+      const z = this.zombies ? this.match.getAgent(e.agentId)?.zombie : null;
+      if (z) {
+        const heavy = z.kind === 'tank' || z.kind === 'brute';
+        if (e.pos.distanceTo(listenerPos()) < (heavy ? 30 : 15)) sfx.zombieStep(e.pos.clone().setY(e.pos.y + 0.1), heavy);
+        return;
+      }
       if (isView(e.agentId)) sfx.footstep(e.surface, null, 0.45);
       else sfx.footstep(e.surface, e.pos.clone().setY(e.pos.y + 0.1));
     });
@@ -213,7 +229,7 @@ export class MatchView {
       }
     });
     on('fireOut', (e) => sfx.fireOut(e.pos));
-    on('decoyShot', (e) => sfx.gunshot(e.sound, e.pos, e.pos.distanceTo(listenerPos())));
+    on('decoyShot', (e) => { if (this.zombies) sfx.boxSpin(e.pos, 0.95); else sfx.gunshot(e.sound, e.pos, e.pos.distanceTo(listenerPos())); });
     on('pulse', (e) => {
       fx.pulseRing(e.pos);
       sfx.pulse(e.pos);
@@ -242,6 +258,13 @@ export class MatchView {
     on('wireRattle', (e) => sfx.wireRattle(e.pos));
     // ---- arsenal + killstreaks
     on('explosion', (e) => {
+      if (e.source === 'disruptor') {
+        fx.glow({ pos: e.pos, count: 40, speed: 7, life: [0.15, 0.5], size: [0.5, 0.08], color: '#8aff5a' });
+        fx.pulseRing(e.pos, '#7dff4a', e.radius * 1.3);
+        fx.lightFlash(e.pos.clone().setY(e.pos.y + 0.4), 0x70ff50, 60, 0.3, 12);
+        sfx.disruptorZap(e.pos.distanceTo(listenerPos()) < 2 ? null : e.pos);
+        return;
+      }
       fx.blast(e.pos, e.radius);
       sfx.blast(e.pos.distanceTo(listenerPos()) < 2 ? null : e.pos, e.radius);
       this.addShake(e.pos, Math.min(1.4, 0.4 + e.radius * 0.1), e.radius * 4);
@@ -385,6 +408,7 @@ export class MatchView {
     const fp = info.firstPerson && !!ka?.alive;
     for (const ag of this.match.agents) {
       const e = this.chars.get(ag.id)!;
+      if (e.model instanceof ZombieModel) continue;
       const fa = find(a, ag.id), fb = find(b, ag.id) ?? fa;
       e.xray.visible = false;
       if (!fa || !fb) { e.model.root.visible = false; e.shadow.visible = false; continue; }
@@ -464,14 +488,39 @@ export class MatchView {
     e.model.setLight(e.light);
   }
 
+  private frameZombie(a: Agent, e: CharEntry, model: ZombieModel, alpha: number, dt: number, now: number) {
+    const zs = a.zombie!;
+    const vis = zs.active && (a.alive || now < zs.freeAt);
+    model.root.visible = vis;
+    e.xray.visible = false;
+    if (!vis) { e.shadow.visible = false; return; }
+    if (e.gen !== zs.gen) {
+      e.gen = zs.gen; e.prev.copy(a.pos); e.cur.copy(a.pos); e.lastMode = zs.mode; e.strikeAt = -10; e.hitAt = -10;
+      model.setKind(zs.kind, a.id * 3 + zs.gen);
+    }
+    if (e.lastMode !== zs.mode) { if (e.lastMode === 'attack' || e.lastMode === 'slam') e.strikeAt = now; e.lastMode = zs.mode; }
+    const p = new Vector3().lerpVectors(e.prev, e.cur, alpha);
+    model.root.position.copy(p);
+    model.root.rotation.y = !a.alive ? Math.atan2(a.deathDir.x, a.deathDir.z) : zs.kind === 'crawler' ? a.motor.bodyYaw : a.yaw;
+    model.update({
+      speed: a.alive ? a.speed2D : 0, gait: zs.gait, mode: zs.mode, modeT: now - zs.modeAt, modeDur: zs.modeUntil - zs.modeAt, strikeT: now - e.strikeAt, arm: zs.arm,
+      rise: zs.mode === 'rise' && a.alive ? clamp((now - zs.modeAt) / Math.max(0.1, zs.modeUntil - zs.modeAt), 0, 1) : 1,
+      enraged: now < zs.enragedUntil, headless: zs.headless, helmet: zs.helmet > 0, vest: zs.vest > 0,
+      dead: !a.alive, deathT: now - a.deathTime, deathVariant: (a.id * 7 + Math.floor(a.deathTime * 13)) % 4, hitT: now - e.hitAt, dt, time: now,
+    });
+    this.lightChar(e, p, dt);
+    this.placeShadow(e, p, a.alive, 0, zs.kind === 'crawler' ? 1 : 0, a.scaleW);
+    if (zs.mode === 'rise' && a.alive) e.shadow.visible = false;
+  }
+
   /** Soft contact shadow under a character (baked lighting has no dynamic shadows). */
-  private placeShadow(e: CharEntry, p: Vector3, alive: boolean, duck: number, prone = 0) {
+  private placeShadow(e: CharEntry, p: Vector3, alive: boolean, duck: number, prone = 0, scale = 1) {
     e.shadow.visible = !!this.r.baked;
     if (!e.shadow.visible) return;
     const ground = this.match.world.collision.groundHeight(p.x, p.z, p.y + 0.3);
     const lift = Math.max(0, p.y - ground);
     e.shadow.position.set(p.x, ground + 0.015, p.z);
-    const size = (alive ? 1.05 + duck * 0.15 : 1.9) * (1 + lift * 0.25);
+    const size = (alive ? 1.05 + duck * 0.15 : 1.9) * (1 + lift * 0.25) * scale;
     e.shadow.scale.set(alive ? size * (1 - prone * 0.3) : size * 0.7, 1, size * (1 + prone * 0.9));
     e.shadow.rotation.y = e.model.root.rotation.y;
     (e.shadow.material as MeshBasicMaterial).opacity = 0.8;
@@ -500,6 +549,12 @@ export class MatchView {
     } else if (s.kind === 'knife') {
       const k = grenadeModel('tknife');
       g.add(k);
+    } else if (s.kind === 'plasma') {
+      const core = new Mesh(new SphereGeometry(0.07, 12, 10), new MeshBasicMaterial({ color: '#d8ffb0', toneMapped: false }));
+      g.add(core);
+      const halo = new Mesh(new SphereGeometry(0.2, 14, 10), new MeshBasicMaterial({ color: '#6aff3a', transparent: true, opacity: 0.45, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+      halo.scale.set(1, 1, 2.2);
+      g.add(halo);
     } else {
       const dart = new Mesh(new CylinderGeometry(0.008, 0.008, 0.12, 6), new MeshBasicMaterial({ color: '#60ff9a' }));
       dart.rotation.x = Math.PI / 2; g.add(dart);
@@ -508,6 +563,9 @@ export class MatchView {
     }
     return g;
   }
+
+  /** Camera shake for anything near the viewer (used by the Zombies view too). */
+  shakeAt(pos: Vector3, amt: number, radius: number) { this.addShake(pos, amt, radius); }
 
   private addShake(pos: Vector3, amt: number, radius: number) {
     const d = pos.distanceTo(this.r.camera.position);
@@ -531,7 +589,7 @@ export class MatchView {
       const e = this.chars.get(a.id);
       if (e) e.cur.copy(a.pos);
     }
-    this.recorder.capture(this.match, (a) => this.heldKey(a), (a) => {
+    if (!this.zombies) this.recorder.capture(this.match, (a) => this.heldKey(a), (a) => {
       const w = a.activeWeapon();
       return w?.def.scope && a.wpn.scope > 0 ? w.def.scope.zooms[a.wpn.scope - 1] : a.wpn.ads ? 1.18 : 1;
     });
@@ -562,6 +620,7 @@ export class MatchView {
     // characters
     if (!kc) for (const a of m.agents) {
       const e = this.chars.get(a.id)!;
+      if (e.model instanceof ZombieModel) { this.frameZombie(a, e, e.model, alpha, dt, now); continue; }
       const hide = firstPerson && a === view;
       e.model.root.visible = !hide && (a.alive || now - a.deathTime < 30);
       if (!e.model.root.visible) { e.xray.visible = false; e.shadow.visible = false; continue; }
@@ -654,6 +713,7 @@ export class MatchView {
       if (s.vel.lengthSq() > 0.01) g.lookAt(s.pos.x - s.vel.x, s.pos.y - s.vel.y, s.pos.z - s.vel.z);
       if (s.kind === 'knife') g.rotateX(-now * 28); // tumbling throw
       if (s.kind === 'rocket' && trail) { this.r.effects.rocketTrail(s.pos.clone().addScaledVector(s.vel, -0.012)); if (Math.random() < 0.3) sfx.rocketLoop(s.pos); }
+      if (s.kind === 'plasma' && trail) this.r.effects.glow({ pos: s.pos.clone(), count: 2, speed: 0.6, life: [0.08, 0.22], size: [0.22, 0.04], color: '#8aff5a' });
     }
     // UAV flyovers
     for (let i = this.uavs.length - 1; i >= 0; i--) {

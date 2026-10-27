@@ -192,7 +192,7 @@ export class ViewModel {
     if (k === 'w') {
       this.item = weaponModel(id as WeaponId, finish, att ?? '');
       this.kind = id === 'knife' ? 'knife' : WEAPONS[id as WeaponId]?.class === 'pistol' ? 'pistol' : 'rifle';
-      this.noShells = this.launcher;
+      this.noShells = this.launcher || id === 'disruptor';
     } else if (k === 'g') { this.item = grenadeModel(id as UtilityId); this.kind = 'grenade'; }
     else if (k === 'd' && id === 'stim') {
       this.item = deviceModel('stim');

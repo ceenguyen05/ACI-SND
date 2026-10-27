@@ -10,7 +10,7 @@ const ui = document.getElementById('ui-root') as HTMLElement;
 // Show a loading screen while procedural textures and the map are generated.
 const loading = document.createElement('div');
 loading.className = 'loading';
-loading.innerHTML = '<div>BUILDING ACI HQ</div><div class="bar"><i></i></div>';
+loading.innerHTML = '<div>ACI: SERIES 1</div><div style="font-size:12px;letter-spacing:.3em;color:#8c96a3">BUILDING ACI HQ</div><div class="bar"><i></i></div>';
 ui.append(loading);
 
 requestAnimationFrame(() => setTimeout(async () => {

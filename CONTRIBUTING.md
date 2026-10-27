@@ -30,5 +30,10 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how CI and deploys work.
 * **New mechanics:** add a test in `tests/` (the simulation is deterministic, so seed a
   `Match` and step it). For input or visual changes, run `npm run test:keys` /
   `npm run test:handling` / `npm run test:visual` locally (they need a GPU).
+* **Zombies:** tuning lives in `src/config/zombies.ts`, the map layout (zones, shutters,
+  wall-buys, machines) in `src/sim/maps/aciHqZombies.ts`. A layout test checks every machine
+  stands against a wall and clear of props. Run `npm run test:zombies` for a browser pass and
+  `SOAK=1 npx vitest run tests/zombies-soak.test.ts --silent=false` for long bot games.
 * **Docs:** controls go in the README table and the in-game *How to play* page
-  (`src/ui/screens/MainMenu.ts`); rules and numbers go in `docs/GAME_DESIGN.md`.
+  (`src/ui/screens/MainMenu.ts`); Search & Destroy rules in `docs/GAME_DESIGN.md`, Zombies
+  rules and numbers in `docs/ZOMBIES.md`.

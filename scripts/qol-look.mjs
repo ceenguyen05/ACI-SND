@@ -1,7 +1,7 @@
 // Visual check: buy-menu Rebuy / Auto-buy, objective markers, round tips, stance HUD, settings.
 //   node scripts/qol-look.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots/qol';
@@ -16,12 +16,11 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('text=Settings');
+await page.click('.mm-item >> text=Settings');
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${OUT}/settings-game.png` });
-await page.click('text=Play');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await page.click('.mm-back');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 await page.waitForTimeout(1200); // round-1 tip appears
 await page.evaluate(() => { for (const el of document.querySelectorAll('.click-to-play')) el.remove(); });

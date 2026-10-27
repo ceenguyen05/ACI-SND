@@ -1,7 +1,7 @@
 // Visual check of the Gunsmith: buy-menu tab, fitted guns in first person, optics, laser and light.
 //   node scripts/gunsmith-look.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const OUT = 'screenshots/gunsmith';
@@ -16,8 +16,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('.seg >> text=Defenders');
-await page.click('text=Start match');
+await startFromMenu(page, 'snd', false, 'Defenders');
 await page.waitForSelector('.hud');
 const snap = async (name, wait = 400) => { await page.waitForTimeout(wait); await page.screenshot({ path: `${OUT}/${name}.png` }); };
 

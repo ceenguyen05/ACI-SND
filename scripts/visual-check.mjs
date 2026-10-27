@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { build, preview } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 
 const out = 'screenshots/visual';
 mkdirSync(out, { recursive: true });
@@ -25,8 +25,7 @@ try {
   await page.goto(server.resolvedUrls.local[0]);
   await page.waitForSelector('.title-screen', { timeout: 60000 });
   await page.keyboard.press('Enter');
-  await page.click('.seg >> text=Defenders');
-  await page.click('text=Start match');
+  await startFromMenu(page, 'snd', false, 'Defenders');
   await page.waitForSelector('.hud');
   await page.evaluate(() => {
     const { app, session, match } = window.__aci;

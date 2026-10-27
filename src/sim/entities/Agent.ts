@@ -9,6 +9,7 @@ import { GADGET_ORDER, emptyGadgets, type GadgetId } from '../../config/gadgets'
 import { createMotorState, eyeOf, heightOf, type MotorState } from '../physics/CharacterMotor';
 import type { StreakId } from '../mode/Killstreaks';
 import { dirFromAngles } from '../../core/math';
+import type { ZombieState, ZPlayerState } from '../zombies/types';
 
 export type ActiveSlot = 'primary' | 'secondary' | 'melee' | 'grenade' | 'bomb' | 'gadget';
 export type HitGroup = 'head' | 'chest' | 'stomach' | 'legs';
@@ -202,6 +203,19 @@ export class Agent {
   flinchYaw = 0;
   /** Tagging slow-down after being hit (CS "tagging"). */
   tagUntil = 0;
+  /** Max health (Zombies: Iron Gut raises it; zombies have their own pools). */
+  maxHealth = 100;
+  /** Run speed override in m/s (zombies); 0 = from the held item. */
+  speedOverride = 0;
+  /** Multiplier on run speed (Marathon perk). */
+  speedMul = 1;
+  /** Body size for hitboxes and eye height (zombie brutes and bosses are bigger). */
+  scaleW = 1;
+  scaleH = 1;
+  /** Zombies mode: set on zombie agents. */
+  zombie: ZombieState | null = null;
+  /** Zombies mode: set on human players (points, perks, downed state). */
+  zp: ZPlayerState | null = null;
 
   constructor(name: string, team: Team, isBot: boolean, look: Record<Team, AgentLook>) {
     this.name = name;
@@ -213,8 +227,8 @@ export class Agent {
 
   get pos() { return this.motor.pos; }
   get vel() { return this.motor.vel; }
-  get height() { return heightOf(this.motor.duck, this.motor.prone, this.motor.slidePose); }
-  get eyeHeight() { return eyeOf(this.motor.duck, this.motor.prone, this.motor.slidePose); }
+  get height() { return heightOf(this.motor.duck, this.motor.prone, this.motor.slidePose) * this.scaleH; }
+  get eyeHeight() { return eyeOf(this.motor.duck, this.motor.prone, this.motor.slidePose) * this.scaleH; }
   get speed2D() { return Math.hypot(this.motor.vel.x, this.motor.vel.z); }
   get crouched() { return this.motor.duck > 0.5; }
   get prone() { return this.motor.prone > 0.5; }
@@ -231,11 +245,12 @@ export class Agent {
 
   /** Max run speed with the currently held item. */
   maxSpeed(): number {
+    if (this.speedOverride > 0) return this.speedOverride * this.speedMul;
     const w = this.activeWeapon();
     let s = w ? w.def.moveSpeed : 6.1; // grenades/bomb ≈ 245u
     if (w?.def.scope && this.wpn.scope > 0) s = w.def.scope.scopedSpeed;
     if (this.wpn.ads) s *= w?.def.ads?.move ?? 0.8;
-    return s;
+    return s * this.speedMul;
   }
 
   /** Fitted attachments for a gun this player owns attachments for. */
@@ -285,8 +300,9 @@ export class Agent {
     const off = this.leanOffset();
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
     const eye = this.eyeHeight;
+    const sw = this.scaleW;
     const box = (group: HitGroup, cx: number, cz: number, y0: number, y1: number, half: number) =>
-      out.push({ group, minX: cx - half, maxX: cx + half, minZ: cz - half, maxZ: cz + half, minY: p.y + y0, maxY: p.y + y1 });
+      out.push({ group, minX: cx - half * sw, maxX: cx + half * sw, minZ: cz - half * sw, maxZ: cz + half * sw, minY: p.y + y0, maxY: p.y + y1 });
     // head follows the eye (lean)
     box('head', p.x + rx * off, p.z + rz * off, eye - 0.13, eye + 0.15, 0.13);
     box('chest', p.x + rx * off * 0.55, p.z + rz * off * 0.55, h * 0.56, eye - 0.13, 0.22);
@@ -318,7 +334,7 @@ export class Agent {
 
   resetForRound(keepGear: boolean, defaultPistol: WeaponId) {
     this.alive = true;
-    this.health = 100;
+    this.health = this.maxHealth;
     this.deathTime = -1;
     if (!keepGear) {
       this.primary = null;

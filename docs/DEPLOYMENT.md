@@ -44,8 +44,10 @@ push to main (or "Run workflow") ──► Deploy to GitHub Pages
 * **Boot check** (`scripts/boot-check.mjs`):
   * Serves the build from **`/ACI-SND/`**, the same sub-path GitHub Pages uses, so broken
     asset paths show up as 404s.
-  * Loads it in headless Chromium, opens the menu and starts a match.
-  * Steps 10 seconds of the round and takes a screenshot.
+  * Loads it in headless Chromium, goes through the menu and starts a Search & Destroy match,
+    steps 10 seconds of the round and takes a screenshot.
+  * Goes back to the menu, starts a Zombies game, steps 20 seconds of wave 1 and takes a second
+    screenshot.
   * Fails on any console error, page error or missing file.
   * It doesn't depend on frame rate, so it's reliable on GitHub's GPU-less runners, where
     WebGL runs on the SwiftShader software renderer at about 1 FPS.
@@ -57,7 +59,8 @@ bigger release:
 
 | Command | What it does |
 |---|---|
-| `npm run verify` | `check` + `check:boot` + the full smoke test + the real-key check |
+| `npm run verify` | `check` + `check:boot` + the full smoke test + the real-key check + the Zombies run |
+| `npm run test:zombies` | Plays Zombies with a bot squad, then stages every zombie type, machines, power-ups, revive, exfil and the end screen; reports horde FPS |
 | `npm run smoke` | Clicks through every menu, buys through the buy menu, shoots a target, runs an accelerated bot match |
 | `npm run test:keys` | Presses every combat key (quick melee, stim, killstreak, C4, cameras, ping, light) |
 | `npm run test:handling` | Real movement / prone / slide / firing / reload / ADS input |

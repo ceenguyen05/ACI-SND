@@ -2,7 +2,7 @@
 // session update (sim + view + HUD) vs. WebGL render submission, per quality preset.
 //   node scripts/frame-cost.mjs [--no-build]
 import { preview, build } from 'vite';
-import { launchBrowser } from './lib/browser.mjs';
+import { launchBrowser, startFromMenu } from './lib/browser.mjs';
 
 if (!process.argv.includes('--no-build')) await build({ logLevel: 'warn' });
 const server = await preview({ preview: { port: 4182 }, logLevel: 'warn' });
@@ -11,7 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 await page.goto(server.resolvedUrls.local[0]);
 await page.waitForSelector('.title-screen', { timeout: 60000 });
 await page.keyboard.press('Enter');
-await page.click('text=Start match');
+await startFromMenu(page);
 await page.waitForSelector('.hud');
 await page.evaluate(() => {
   const { app, session } = window.__aci;

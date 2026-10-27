@@ -7,10 +7,12 @@ import { weaponModel } from '../render/WeaponModels';
 import { verticalFov } from '../render/MatchView';
 import { sfx } from '../audio/Sfx';
 import { h } from '../ui/dom';
-import { MainMenu, TitleScreen, type MenuPage } from '../ui/screens/MainMenu';
+import { GAME_TITLE, MainMenu, TitleScreen, type MenuPage } from '../ui/screens/MainMenu';
+import { ZombieModel } from '../render/ZombieModel';
+import { ZOMBIE_ORDER } from '../config/zombies';
 import type { Team } from '../config/rules';
 import type { WeaponId } from '../config/weapons';
-import { GameSession, type SessionOptions } from './GameSession';
+import { GameSession, type GameMode, type SessionOptions } from './GameSession';
 import { Input } from './Input';
 import { loadProfile, saveProfile, type Profile, type Settings } from './Profile';
 
@@ -34,9 +36,15 @@ export class App {
   private showcase = new Group();
   private showChar: CharacterModel;
   private showWeapon: Group | null = null;
-  private menuPage: MenuPage = 'play';
+  private menuPage: MenuPage = 'home';
   private showTeam: Team = 'T';
   private showWeaponId: WeaponId = 'ravager';
+  private showMode: GameMode | null = null;
+  /** A zombie posing behind the Zombies setup (cycles through every kind). */
+  private showZombie = new ZombieModel();
+  private zombieKindIdx = 0;
+  private zombieKindAt = 0;
+  private lastOpts: SessionOptions = {};
 
   constructor(canvas: HTMLCanvasElement, ui: HTMLElement, world: World, baked: BakedLighting | null) {
     this.ui = ui;
@@ -61,11 +69,18 @@ export class App {
     this.showChar.root.rotation.y = Math.PI - 0.35;
     this.showcase.visible = false;
     this.renderer.scene.add(this.showcase);
+    this.showZombie.setKind('walker', 1);
+    this.showZombie.root.position.set(3.0, 0, -30.4);
+    this.showZombie.root.rotation.y = Math.PI - 0.55;
+    this.showZombie.root.visible = false;
+    this.renderer.scene.add(this.showZombie.root);
+    document.title = GAME_TITLE;
 
     // URL parameters for automated testing: ?autotest=1&speed=8
     const params = new URLSearchParams(location.search);
     if (params.get('autotest')) {
-      this.startGame({ spectate: true, timeScale: Number(params.get('speed') ?? 6), seed: 42, rules: { roundsToWin: 2, halfLength: 1, freezeTime: 2, roundEndDelay: 2 } });
+      const mode: GameMode = params.get('mode') === 'zombies' ? 'zombies' : 'snd';
+      this.startGame({ mode, spectate: true, timeScale: Number(params.get('speed') ?? 6), seed: 42, rules: { roundsToWin: 2, halfLength: 1, freezeTime: 2, roundEndDelay: 2 } });
     } else this.showTitle();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -92,18 +107,19 @@ export class App {
   private showMenu() {
     this.mode = 'menu';
     this.menu = new MainMenu(this.profile, {
-      start: (spectate) => this.startGame({ spectate }),
+      start: (mode, spectate) => this.startGame({ mode, spectate }),
       profileChanged: () => { saveProfile(this.profile); this.refreshShowcase(); },
       settingsChanged: (s) => this.applySettings(s),
-      pageChanged: (page, ctx) => { this.menuPage = page; this.showTeam = ctx.team; this.showWeaponId = ctx.weapon; this.refreshShowcase(); },
+      pageChanged: (page, ctx) => { this.menuPage = page; this.showTeam = ctx.team; this.showWeaponId = ctx.weapon; this.showMode = ctx.mode; this.refreshShowcase(); },
     }, this.input);
     this.setScreen(this.menu.el);
     this.refreshShowcase();
   }
 
   private refreshShowcase() {
-    const show = this.mode === 'menu' && (this.menuPage === 'agents' || this.menuPage === 'loadout');
+    const show = this.mode === 'menu' && (this.menuPage === 'agents' || this.menuPage === 'loadout' || (this.menuPage === 'play' && this.showMode === 'snd'));
     this.showcase.visible = show;
+    this.showZombie.root.visible = this.mode === 'menu' && this.menuPage === 'play' && this.showMode === 'zombies';
     const team = this.menuPage === 'agents' ? this.showTeam : this.profile.match.side === 'CT' ? 'CT' : 'T';
     this.showChar.setLook(this.profile.looks[team]);
     const held = this.menuPage === 'loadout' ? this.showWeaponId : team === 'T' ? 'ravager' : 'sentinel';
@@ -119,24 +135,28 @@ export class App {
   }
 
   startGame(opts: SessionOptions) {
+    this.lastOpts = opts;
     this.setScreen(null);
+    this.menu?.dispose();
     this.menu = null;
     this.showcase.visible = false;
+    this.showZombie.root.visible = false;
     if (this.showWeapon) { this.renderer.camera.remove(this.showWeapon); this.showWeapon = null; }
     this.mode = 'game';
     sfx.resume();
     this.session = new GameSession(this.renderer, this.input, this.profile, this.ui, () => saveProfile(this.profile), (s) => this.applySettings(s), opts);
     this.session.onExit = () => this.endGame();
+    this.session.onRestart = () => { const o = this.lastOpts; this.endGame(false); this.startGame(o); };
     (window as unknown as { __aci: unknown }).__aci = { app: this, session: this.session, match: this.session.match };
     if (!opts.spectate) this.input.requestLock();
   }
 
-  private endGame() {
+  private endGame(toMenu = true) {
     this.session?.dispose();
     this.session = null;
     this.input.exitLock();
     this.renderer.showViewModel = false;
-    this.showMenu();
+    if (toMenu) this.showMenu();
   }
 
   private loop(t: number) {
@@ -169,13 +189,33 @@ export class App {
     cam.fov = verticalFov(this.profile.settings.fov);
     cam.updateProjectionMatrix();
     if (this.mode === 'menu' && this.showcase.visible) {
-      // stand the camera in front of the showcase agent
+      // stand the camera in front of the showcase agent (on the right of the mode setup)
       cam.position.set(2.4, 1.4, -26.6);
-      cam.lookAt(0.4, 1.0, -30.2);
+      if (this.menuPage === 'play') cam.lookAt(-1.4, 1.0, -30.2); else cam.lookAt(0.4, 1.0, -30.2);
       if (this.showWeapon) { this.showWeapon.rotation.y += dt * 0.6; this.showChar.root.visible = false; }
       else this.showChar.root.visible = true;
       this.showChar.update({ speed: 0, maxSpeed: 6, crouch: 0, pitch: Math.sin(performance.now() / 1400) * 0.05, lean: 0, onGround: true, dead: false, deathT: 0, firing: 0, planting: false, dt });
       this.renderer.effects.update(dt, cam, this.renderer.height, cam.fov, performance.now() / 1000);
+      return;
+    }
+    if (this.mode === 'menu' && this.showZombie.root.visible) {
+      // a zombie lurches toward you behind the Zombies setup, cycling through every kind
+      const now = performance.now() / 1000;
+      if (now >= this.zombieKindAt) {
+        this.zombieKindAt = now + 3.2;
+        this.zombieKindIdx = (this.zombieKindIdx + 1) % ZOMBIE_ORDER.length;
+        this.showZombie.setKind(ZOMBIE_ORDER[this.zombieKindIdx], this.zombieKindIdx * 5 + 1);
+      }
+      const z = this.showZombie, kind = z.kind;
+      const t = now % 3.2;
+      cam.position.set(0.6, kind === 'tank' ? 1.9 : 1.55, -25.6);
+      cam.lookAt(-1.4, kind === 'tank' ? 1.5 : 1.15, -30.4);
+      const scream = t > 2.1 && t < 3.0;
+      z.update({ speed: scream ? 0 : kind === 'crawler' ? 1.6 : 1.3, gait: kind === 'runner' ? 'sprint' : 'walk', mode: scream ? (kind === 'tank' ? 'roar' : 'scream') : 'chase',
+        modeT: t - 2.1, modeDur: 0.9, strikeT: 9, arm: 1, rise: Math.min(1, t / 1.1), enraged: scream, headless: false, helmet: true, vest: true,
+        dead: false, deathT: 0, deathVariant: 0, hitT: 9, dt, time: now });
+      if (this.renderer.baked) z.setLight(this.renderer.baked.probe(3, 1.1, -30.4));
+      this.renderer.effects.update(dt, cam, this.renderer.height, cam.fov, now);
       return;
     }
     this.menuT = (this.menuT + dt / 90) % 1;
