@@ -44,7 +44,7 @@ export class TitleScreen {
       logo('title-logo'),
       h('div', { class: 'title-modes' }, h('span', null, 'Search & Destroy'), h('i'), h('span', null, 'Zombies')),
       h('div', { class: 'press-any' }, 'Click or press any key'),
-      h('div', { class: 'title-foot' }, 'ACI HQ · Offline with bots · Built with Three.js'));
+      h('div', { class: 'title-foot' }, 'ACI HQ · Version 1.5.5'));
     window.addEventListener('keydown', go);
   }
 }
