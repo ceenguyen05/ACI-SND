@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { MOVE } from '../../config/movement';
+import { GUNPLAY } from '../../config/gunplay';
 import type { WeaponDef } from '../../config/weapons';
 import { DEG, clamp, dirFromAngles } from '../../core/math';
 import type { Agent, HitGroup, Hitbox } from '../entities/Agent';
@@ -37,6 +38,33 @@ function exitDistance(p: Vector3, d: Vector3, b: Box): number {
 }
 
 const hbTmp: Hitbox[] = [];
+
+/** Exact hits always win. Only a human's otherwise missed gunshot gets edge tolerance. */
+export function traceGunBullet(ctx: SimContext, shooter: Agent, origin: Vector3, dir: Vector3, range: number): TraceResult {
+  const exact = traceBullet(ctx, shooter, origin, dir, range);
+  if (shooter.isBot || exact.agent || exact.device || ctx.time < shooter.flashUntil - 0.3) return exact;
+  let best = exact;
+  for (const a of ctx.agents) {
+    if (!a.alive || a === shooter || a.team === shooter.team) continue;
+    for (const hb of a.hitboxes(hbTmp)) {
+      const pad = hb.group === 'head' ? GUNPLAY.headTolerance : GUNPLAY.bodyTolerance;
+      const hit = rayBox(origin, dir, {
+        minX: hb.minX - pad, maxX: hb.maxX + pad, minY: hb.minY - pad, maxY: hb.maxY + pad,
+        minZ: hb.minZ - pad, maxZ: hb.maxZ + pad,
+      }, best.t);
+      if (!hit || hit.t >= best.t) continue;
+      const point = origin.clone().addScaledVector(dir, hit.t);
+      // Check the real volume too: padding must never expose a hidden enemy around cover.
+      const visible = point.clone().clamp(new Vector3(hb.minX, hb.minY, hb.minZ), new Vector3(hb.maxX, hb.maxY, hb.maxZ));
+      const sight = visible.clone().sub(origin), distance = sight.length();
+      sight.normalize();
+      if (ctx.world.collision.raycast(origin, sight, distance) || ctx.gadgets.raycast(origin, sight, distance)
+        || ctx.utility.smokeBlocks(origin, visible)) continue;
+      best = { t: hit.t, point, agent: a, group: hb.group, normal: null, surface: null, device: null, box: null };
+    }
+  }
+  return best;
+}
 
 /** Hitscan trace against the world and every living agent except `ignore`. */
 export function traceBullet(ctx: SimContext, ignore: Agent | null, origin: Vector3, dir: Vector3, range: number): TraceResult {
@@ -87,7 +115,25 @@ export function inaccuracy(def: WeaponDef, a: Agent): number {
   if (a.wpn.ads) v *= def.ads?.spread ?? 0.75;
   // a bipod braces the gun while crouched and still
   if (def.mods?.bipod && a.crouched && a.speed2D < 0.6) v *= 0.6;
-  return (s.base + v) / 1000;
+  const forgiveness = !a.isBot && !def.projectile ? (a.wpn.ads || a.wpn.scope > 0 ? GUNPLAY.playerAdsSpread : GUNPLAY.playerSpread) : 1;
+  return (s.base + v) * forgiveness / 1000;
+}
+
+/**
+ * Widest angle (radians) a shot can land from the aim direction: the inaccuracy cone, plus the
+ * pellet pattern for shotguns. The crosshair gap and the scope's spread ring show this.
+ */
+export function spreadCone(def: WeaponDef, a: Agent): number {
+  return inaccuracy(def, a) + ((def.pellets ?? 1) > 1 ? def.spread.base / 1000 : 0);
+}
+
+/**
+ * Direction (radians) the next shot leaves in before spread: the view angles plus the full recoil
+ * punch and hit flinch. The camera shows only part of the punch, so this is where the HUD puts
+ * the crosshair and where the sights point.
+ */
+export function shotAngles(a: Agent, yaw = a.yaw, pitch = a.pitch): { yaw: number; pitch: number } {
+  return { yaw: yaw + (a.aimPunchYaw + a.flinchYaw) * DEG, pitch: pitch + (a.aimPunchPitch + a.flinchPitch) * DEG };
 }
 
 const fwd = new Vector3(), right = new Vector3(), up = new Vector3(), dir = new Vector3();
@@ -95,8 +141,7 @@ const fwd = new Vector3(), right = new Vector3(), up = new Vector3(), dir = new 
 /** Fire one trigger pull of a gun: handles pellets, spread, recoil punch, damage, events. */
 export function fireGun(ctx: SimContext, shooter: Agent, def: WeaponDef): void {
   const eye = shooter.eyePos(new Vector3());
-  const yaw = shooter.yaw + (shooter.aimPunchYaw + shooter.flinchYaw) * DEG;
-  const pitch = shooter.pitch + (shooter.aimPunchPitch + shooter.flinchPitch) * DEG;
+  const { yaw, pitch } = shotAngles(shooter);
   dirFromAngles(yaw, pitch, fwd);
   right.set(Math.cos(yaw), 0, -Math.sin(yaw));
   up.crossVectors(right, fwd).normalize();
@@ -116,7 +161,8 @@ export function fireGun(ctx: SimContext, shooter: Agent, def: WeaponDef): void {
     let from = eye, travelled = 0, scale = 1, pens = 0;
     let end = eye;
     for (;;) {
-      const res = traceBullet(ctx, shooter, from, dir, def.range - travelled);
+      // Assistance applies only before penetration; intentional wallbangs keep exact hitboxes.
+      const res = pens === 0 ? traceGunBullet(ctx, shooter, from, dir, def.range - travelled) : traceBullet(ctx, shooter, from, dir, def.range - travelled);
       end = res.point;
       if (res.agent && res.group) {
         const v = res.agent;

@@ -2,7 +2,7 @@ import type { Team } from '../../config/rules';
 import type { Match } from '../../sim/mode/Match';
 import type { Agent } from '../../sim/entities/Agent';
 import type { MapDef } from '../../sim/world/MapTypes';
-import { propBounds } from '../../sim/world/World';
+import { propColliders } from '../../sim/world/World';
 
 const PPM = 4; // pixels per meter in the overview image
 
@@ -24,8 +24,10 @@ export function renderOverview(map: MapDef, ppm = PPM): HTMLCanvasElement {
   g.fillStyle = 'rgba(30,34,40,0.75)';
   for (const p of map.props) {
     if (p.solid === false) continue;
-    const b = propBounds(p);
-    g.fillRect((b.minX - map.originX) * ppm, (b.minZ - map.originZ) * ppm, (b.maxX - b.minX) * ppm, (b.maxZ - b.minZ) * ppm);
+    for (const b of propColliders(p)) {
+      // Thin partitions still need to read as a line at radar scale.
+      g.fillRect((b.minX - map.originX) * ppm, (b.minZ - map.originZ) * ppm, Math.max(1, (b.maxX - b.minX) * ppm), Math.max(1, (b.maxZ - b.minZ) * ppm));
+    }
   }
   for (const site of ['A', 'B'] as const) {
     const s = map.sites[site];

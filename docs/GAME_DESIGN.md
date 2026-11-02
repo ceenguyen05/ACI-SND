@@ -108,6 +108,20 @@ recovery time. Running with a rifle is very inaccurate.
 it (CS "view punch"), so you pull the mouse down and against the sway. The pattern recovers when
 you stop firing.
 
+**Crosshair and sights show where the bullet goes.** The next shot leaves along the view plus the
+full recoil punch and flinch (`shotAngles` in `Ballistics.ts`). The HUD projects that direction
+through the camera every frame (`MatchView.aimNdc`) and puts everything you aim with on it:
+* The crosshair climbs with the 55% of the punch the camera doesn't show, and drifts with stun
+  sway (random camera shake is left out). Settings → Crosshair → *Follow recoil* turns this off
+  for a CS-style fixed crosshair.
+* The dynamic gap is the real spread cone (`spreadCone`): inaccuracy plus, for shotguns, the
+  pellet pattern. Running and jumping open it as far as the bullets actually spread.
+* Snipers show it too when unscoped, so the no-scope penalty is visible.
+* Aimed, the view model turns the whole gun about the eye onto the same point (converted from the
+  world camera's FOV to the view model's), so iron sights, red dots, holo rings, the ACOG chevron
+  and sniper reticles all sit on the bullet. Hip-fire motion (sway, bob, crouch and landing
+  offsets, the free kick) fades out as the sights come up, so the sight picture stays true.
+
 The camera receives the new recoil on the firing tick and eases the visual response across
 render frames. Bullet recoil remains deterministic. Automatic fire carries fractional-tick
 cooldown time forward so a 600 RPM rifle averages 600 RPM rather than rounding every shot
@@ -115,8 +129,26 @@ up to seven ticks. Reloading and drawing another weapon clear the previous spray
 
 **Alt fire (right mouse).**
 * Snipers cycle through two zoom levels and unscope after each shot, then re-scope automatically.
-* Other guns aim down sights: 1.18× zoom, 25% less spread, 20% slower movement.
+  The scope has a duplex reticle with a lit centre dot and the zoom readout. A ring opens to the
+  real spread whenever moving, firing or jumping has pushed it past the gun's settled accuracy.
+* Other guns aim down sights: 1.18× zoom, 25% less spread, 20% slower movement. The crosshair
+  fades out as the sights come up.
+* The Hammer RPG aims through a 2× ranging scope. Its chevrons for 25 / 50 / 75 / 100 m are
+  solved from the rocket's real flight (`launcherHoldover`).
+* The Thumper's iron sights get range marks for 10–50 m under the front post: put the target
+  on its distance mark to land the 40 mm shell.
 * The knife stabs.
+
+**Iron sights.** Every gun's model records its sight line (`userData.ironY`). The eye sits on that
+line when aiming, and the front post's tip is exactly on it:
+* Rifles and SMGs have a notched rear sight and a front post.
+* The carry-handle guns (Tempest, Talon, Bulwark) have both sights on top of the handle.
+* The Anvil's sights stand on risers above its feed cover.
+* Pistols have a notch-and-post slide.
+* The Breacher has low bead sights, so a fitted dot sits clear above them.
+* The Thumper has a raised ladder.
+
+`tests/aiming.test.ts` casts rays down every gun's sight line to keep it clear.
 
 ## Buying shortcuts, markers and tips
 
@@ -197,8 +229,10 @@ the stock gun (white) with your fitted gun (green for better, red for worse).
 
 **Optics in first person.**
 * The red dot and holographic sights line the camera up with the optic and draw a crisp
-  reticle when you aim down sights.
+  reticle when you aim down sights. The iron sights may co-witness low in the window but never
+  reach the dot.
 * The ACOG switches to a 2.5× scope view with a chevron reticle.
+* All reticles follow the recoil onto the bullet's point.
 
 **Lasers and the light.**
 * The 1 mW laser beam is only visible to you; the 5 mW beam is visible to everyone.
@@ -397,12 +431,21 @@ Missile 6. We lowered the early streaks by one because S&D rounds have no respaw
 ## Aim assist
 
 An optional assist for the player (never bots), set in Settings → Game: Off / Low / Medium / High.
-* **Friction:** mouse sensitivity drops (to 72% / 56% / 42% at the centre) while the crosshair is
-  within a cone around a visible enemy's upper chest. The cone is the angle that covers
-  0.7 / 1.0 / 1.3 m at the enemy's distance, clamped between 1.2° and 5° / 7° / 9°.
+Everything is measured from where the next bullet goes (view plus recoil punch), the same point
+the crosshair shows.
+* **Target point:** the nearest point of a visible enemy's body column, from the waist to the
+  middle of the head (lean and prone poses included). Aiming anywhere on the body gets no
+  vertical drag, so the assist never pulls you off a headshot onto the chest.
+* **Friction:** mouse sensitivity drops (to 72% / 56% / 42% on the body) while the shot is
+  within a cone around that point. The cone is the angle that covers 0.7 / 1.0 / 1.3 m at the
+  enemy's distance, clamped between 1.2° and 5° / 7° / 9°.
 * **Magnetism:** a pull toward that point that's proportional to the remaining error and
-  capped at 7 / 12 / 18 °/s. It works at full strength while you move the mouse or strafe and
-  at 30% while you hold still. The vertical pull is weaker so recoil control stays yours.
+  capped at 7 / 12 / 18 °/s. Magnified scopes divide the cap by the zoom so the zoomed view
+  doesn't swing. It works at full strength while you move the mouse or strafe and at 30% while
+  you hold still. The vertical pull is weaker so recoil control stays yours.
+* **Tracking:** while you're aiming or moving, the view follows 25% / 40% / 55% of the target's
+  motion across your screen (theirs and your own strafing). It's scaled by how close you are to
+  them, so strafe duels stay on target.
 * It ignores teammates and anything behind walls or smoke, switches off while you're flashed,
   and doesn't apply while you watch a camera or steer a missile.
 
@@ -426,7 +469,11 @@ An optional assist for the player (never bots), set in Settings → Game: Off / 
   * **Perception:** field of view plus line of sight, blocked by smoke and by flashes.
   * **Reaction:** delayed by difficulty. Bots holding a pre-aimed angle react faster; bots
     running in react slower.
-  * **Aim:** starts with an error that closes over time, and bots partially compensate for spray.
+  * **Aim:** initial error closes over time, but smooth persistent drift remains. Bots sample
+    target positions at difficulty-specific intervals and estimate motion from the last sample;
+    direction changes can fool them. Recoil compensation and headshot preference are lower at
+    every level. Losing visibility stops aimed fire immediately; reappearing targets require
+    another reaction window.
   * **Shooting style:** counter-strafe to shoot, tap or burst at long range, crouch-spray when
     anchoring, and switch to the pistol instead of reloading in close fights.
   * **Senses:** they hear footsteps, gunshots, reloads and decoys (walls muffle sound) and turn
@@ -450,10 +497,59 @@ An optional assist for the player (never bots), set in Settings → Game: Off / 
     Defenders throw stuns at pushes they can hear.
   * Stunned bots aim 65% slower.
 * **Difficulty:** Easy / Normal / Hard / Expert scale reaction time, aim speed, aim error, spray
-  control, FOV, headshot preference, and how often they use utility.
+  control, FOV, headshot preference, burst recovery, tracking delay, and utility use.
 
-On Normal difficulty, a 60-round bot-vs-bot simulation (`npm run balance`) gives Attackers
-about a 55% round-win rate with gadgets in play, with plants, defuses, and utility in most
+| Level | Base reaction | Tracking sample interval | Recoil compensation | Head aim preference |
+| --- | --- | --- | --- | --- |
+| Easy | 950 ms | 280 ms | 6% | 4% |
+| Normal | 620 ms | 220 ms | 30% | 14% |
+| Hard | 400 ms | 160 ms | 58% | 28% |
+| Expert | 280 ms | 120 ms | 76% | 42% |
+
+Reaction varies with awareness and movement, with a floor of 80% of the base. These are
+target selection preferences, not guaranteed hit or headshot rates. Automatic fire has
+short recovery pauses on every level, and semi-auto bots release the trigger between shots.
+
+### Player precision and shot feedback
+
+Human hitscan gunshots use 18% less random inaccuracy at the hip and 28% less while aiming
+(on top of weapon ADS modifiers). Movement, jumping, landing, bloom and deterministic
+recoil still matter. Shotgun pellet pattern width stays weapon-specific. Launchers retain
+their original ballistic spread.
+
+An otherwise missed human gunshot may graze an enemy within 5.5 cm of a body volume or
+2.2 cm of a head volume. This fixed tolerance follows crouch, lean, prone and enemy scaling;
+it never widens with range. Exact hits take priority, so chest hits remain chest hits.
+Teammates, bots, melee, gadgets and penetrated shots keep exact hitboxes. Walls, shields,
+smoke and blindness block edge assistance. The bullet and tracer keep their straight path.
+The existing Off/Low/Medium/High aim setting separately controls reticle friction and pull;
+tracking shares the pull rate limit, and a covered aim point never attracts the reticle.
+
+Sights show current simulation recoil while camera recoil remains smoothed. Tracers start
+with fresh geometry at the actual muzzle and end at the resolved shot point. Muzzle flashes
+are shorter, fade out, and narrow during ADS; material-specific impacts keep concrete dust,
+metal sparks and pale glass fragments distinct without lingering clouds over the target.
+
+Research informing these choices (reviewed November 2, 2026):
+
+* [Riot: The State of Hit Registration](https://playvalorant.com/en-us/news/dev/the-state-of-hit-registration/)
+  distinguishes correct hit outcomes from readable feedback. Here, the sights, shot traces
+  and effects share the resolved simulation state.
+* [Bungie: May 5, 2022 weapon discussion](https://www.bungie.net/7/en/News/article/51319)
+  distinguishes accuracy, bullet magnetism, and reticle friction/adhesion. Our adaptation uses
+  small fixed hit tolerances and separate reticle assistance, retaining recoil and movement costs.
+* [Michael Booth: The Official Counter-Strike Bot, GDC 2004](https://media.gdcvault.com/gdc04/slides/making_of_official.pdf)
+  describes aim offsets, view drift, weapon proficiency and human reaction times. Those
+  principles inform our persistent drift, delayed motion estimates and difficulty-specific pauses.
+
+The exact values above are local design choices, validated by the firing-lane tests in
+`tests/hit-registration.test.ts` and `tests/bot-accuracy.test.ts`, plus browser gunplay checks.
+The fixed 20 m moving-target test (six seeds, eight seconds each, stationary Sentinel bot
+against a player strafing through the real movement system) measured hit rates of 15% /
+17% / 27% / 35% from Easy to Expert. These isolate aiming, not match win rates.
+
+Use `npm run balance` to measure round-win rates after tuning; the older 55% Attacker
+baseline predates the current gunplay changes. The simulation includes plants, defuses and utility in most
 rounds.
 
 ## Customization
@@ -466,7 +562,8 @@ rounds.
   gradient fades, hex, gold), chosen per weapon. They show on your view model and in the
   third-person model.
 * **Crosshair editor** (CS-style): classic, dot or circle style; color, size, gap, thickness,
-  dot, outline, opacity, and a dynamic spread gap.
+  dot, outline, opacity, a dynamic spread gap, and *follow recoil*. It is drawn on whole device
+  pixels, so it stays crisp at any display scaling.
 * **Settings:**
   * Game: sensitivity (CS scale, 0.022°/count), zoom sensitivity, invert Y, FOV (4:3
     horizontal, like CS), view-model FOV, left-handed view model, lean and ADS hold/toggle,

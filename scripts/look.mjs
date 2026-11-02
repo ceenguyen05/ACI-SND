@@ -37,6 +37,15 @@ const spots = [
   ['lobby', 0, -25, Math.PI, 0],
   ['cubicles', -8, -1, yawTo(-1, 0), 0],
   ['warehouse', 10, 4, 0, 0],
+  ['pods', -55.5, -27, yawTo(1, -0.45), -0.12],
+  ['conference', -21.5, -26, yawTo(-0.35, -1), -0.15],
+  ['break-room', -34, -8, yawTo(-1, 0.35), -0.08],
+  ['showcase', 0.5, -33.5, yawTo(-0.45, -1), -0.05],
+  ['test-floor', 21, -3, yawTo(1, -0.05), 0.08],
+  ['robot', 45.5, -22.5, yawTo(1, -0.55), 0],
+  ['yard-west', -32, 29.5, yawTo(-1, 0.6), 0.04],
+  ['pod-inside', -35.3, -30.2, yawTo(-1, 0.2), -0.42],
+  ['speed-sign', -6.5, -26.5, yawTo(-1, -0.3), 0.05],
 ].filter((s) => !only || only.includes(s[0]));
 for (const [name, x, z, yaw, pitch] of spots) {
   await page.evaluate(([x, z, yaw, pitch]) => {

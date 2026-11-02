@@ -3,13 +3,14 @@ import { NavGrid } from '../ai/NavGrid';
 import { inRect } from '../../core/math';
 import type { Team } from '../../config/rules';
 import type { FloorType, MapDef, PropDef, PropKind, SiteId } from './MapTypes';
+import { compoundShape } from './PropShapes';
 
 export interface WallBlock { c0: number; r0: number; c1: number; r1: number; height: number; material: FloorType['wallMaterial'] }
 export interface CeilingBlock { c0: number; r0: number; c1: number; r1: number; height: number; key: string }
 
 const PROP_SURFACE: Partial<Record<PropKind, SurfaceKind>> = {
-  cubicle: 'fabric', sofa: 'fabric', confTable: 'wood', table: 'wood', reception: 'wood', counter: 'wood',
-  crate: 'wood', pallet: 'wood', packTable: 'wood', bench: 'wood', pillar: 'concrete', barrier: 'concrete', partition: 'wall',
+  cubicle: 'fabric', sofa: 'fabric', confTable: 'wood', table: 'wood', reception: 'wood', counter: 'wood', kitchenette: 'wood',
+  crate: 'wood', pallet: 'wood', packTable: 'wood', bench: 'wood', display: 'wood', pillar: 'concrete', barrier: 'concrete', partition: 'wall',
 };
 
 /** Runtime world: geometry queries derived from a MapDef. Shared by simulation and renderer. */
@@ -56,8 +57,7 @@ export class World {
     // props
     for (const p of map.props) {
       if (p.solid === false) continue;
-      const b = propBounds(p);
-      this.collision.add({ ...b, surface: PROP_SURFACE[p.kind] ?? 'metal' });
+      for (const b of propColliders(p)) this.collision.add({ ...b, surface: PROP_SURFACE[p.kind] ?? 'metal' });
     }
     for (const b of extra) this.collision.add(b);
     this.collision.build(4);
@@ -101,6 +101,21 @@ export class World {
 export function propBounds(p: PropDef) {
   const y = p.y ?? 0;
   return { minX: p.x - p.w / 2, maxX: p.x + p.w / 2, minZ: p.z - p.d / 2, maxZ: p.z + p.d / 2, minY: y, maxY: y + p.h };
+}
+
+/** Collision boxes of a prop: its footprint, or the parts of a compound prop (cubicle pods, the speed trailer). */
+export function propColliders(p: PropDef): ReturnType<typeof propBounds>[] {
+  const f = p.facing ?? 0, odd = f % 2 === 1;
+  const parts = compoundShape(p.kind, odd ? p.d : p.w, odd ? p.w : p.d, p.h);
+  if (!parts) return [propBounds(p)];
+  // Same local → world mapping as the visuals in Props.ts (quarter turns only).
+  const rot = -f * Math.PI / 2, cos = Math.round(Math.cos(rot)), sin = Math.round(Math.sin(rot));
+  const y = p.y ?? 0;
+  return parts.map((b) => {
+    const x = p.x + b.x * cos + b.z * sin, z = p.z - b.x * sin + b.z * cos;
+    const w = odd ? b.d : b.w, d = odd ? b.w : b.d, y0 = y + (b.y ?? 0);
+    return { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, minY: y0, maxY: y0 + b.h };
+  });
 }
 
 /** Wall cells merged greedily into rectangles; height = tallest neighbouring ceiling. */

@@ -69,14 +69,29 @@ function stock(g: Group, material: Material, wood: boolean) {
   }
 }
 
-function sights(g: Group, front: number, rear = 0.035) {
-  part(g, black(), 0.028, 0.012, 0.025, 0, 0.09, rear);
-  for (const x of [-0.011, 0.011]) part(g, steel(), 0.006, 0.014, 0.012, x, 0.102, rear);
-  part(g, black(), 0.026, 0.014, 0.022, 0, 0.075, front);
-  part(g, steel(), 0.004, 0.024, 0.007, 0, 0.092, front);
+/**
+ * Iron sights with the sight line at height `line`: a notched rear sight (base under the line, an
+ * ear either side) and a front post whose tip sits exactly on the line. The view model puts the
+ * eye on `userData.ironY`, so aiming lays the post tip on the screen point the bullet goes to.
+ */
+function sights(g: Group, front: number, { rear = 0.035, line = 0.102, rearBase = 0.084, frontBase = 0.068 } = {}) {
+  const rh = line - 0.006 - rearBase;
+  part(g, black(), 0.028, rh, 0.025, 0, rearBase + rh / 2, rear);
+  for (const x of [-0.011, 0.011]) part(g, steel(), 0.006, 0.014, 0.012, x, line, rear);
+  part(g, black(), 0.026, 0.014, 0.022, 0, frontBase + 0.007, front);
+  const ph = line - (frontBase + 0.012);
+  part(g, steel(), 0.004, ph, 0.007, 0, line - ph / 2, front);
+  // a tall post gets protective wings, like an AR front sight tower
+  if (ph > 0.03) for (const x of [-0.009, 0.009]) part(g, black(), 0.003, ph * 0.8, 0.012, x, line - 0.002 - ph * 0.4, front);
+  g.userData.ironY = line;
 }
 
-interface RifleSpec { recv: number; barrel: number; hand: number; stock: 'solid' | 'wood' | 'skeleton' | 'none' | 'bullpup'; mag: 'curved' | 'straight' | 'short' | 'none'; scope?: number; wood?: boolean; handle?: boolean; muzzle?: 'brake' | 'flash' | 'suppressor' }
+interface RifleSpec {
+  recv: number; barrel: number; hand: number; stock: 'solid' | 'wood' | 'skeleton' | 'none' | 'bullpup'; mag: 'curved' | 'straight' | 'short' | 'none';
+  scope?: number; wood?: boolean; handle?: boolean; muzzle?: 'brake' | 'flash' | 'suppressor';
+  /** Raised iron sight line (guns with a tall feed cover). */
+  sightLine?: number;
+}
 
 function rifle(skin: Material, s: RifleSpec): Group {
   const g = new Group();
@@ -135,8 +150,15 @@ function rifle(skin: Material, s: RifleSpec): Group {
     const z = -s.recv + 0.065 - i * 0.033;
     for (const x of [-0.028, 0.028]) part(g, black(), 0.003, 0.013, 0.019, x, 0.038, z);
   }
-  if (s.handle) { part(g, skin, 0.025, 0.04, 0.22, 0, 0.1, -0.08); part(g, skin, 0.02, 0.05, 0.02, 0, 0.08, 0.01); }
-  else if (!s.wood) part(g, black(), 0.02, 0.015, s.recv * 0.7, 0, 0.085, -s.recv / 2 + 0.08);
+  if (s.handle) {
+    part(g, skin, 0.025, 0.04, 0.22, 0, 0.1, -0.08); part(g, skin, 0.02, 0.05, 0.02, 0, 0.08, 0.01);
+    // FAMAS / AUG style: both sights ride on top of the carry handle, so it never blocks the view
+    const line = 0.128;
+    for (const x of [-0.0085, 0.0085]) part(g, steel(), 0.006, 0.015, 0.012, x, 0.1275, 0.012);
+    part(g, steel(), 0.004, line - 0.12, 0.007, 0, (line + 0.12) / 2, -0.18);
+    for (const x of [-0.009, 0.009]) part(g, black(), 0.004, 0.007, 0.012, x, 0.1235, -0.18);
+    g.userData.ironY = line;
+  } else if (!s.wood) part(g, black(), 0.02, 0.015, s.recv * 0.7, 0, 0.085, -s.recv / 2 + 0.08);
   if (s.scope) {
     cyl(g, black(), 0.022, s.scope, 0, 0.13, -0.05, 12);
     cyl(g, black(), 0.03, 0.05, 0, 0.13, -0.05 - s.scope / 2, 12);
@@ -146,8 +168,8 @@ function rifle(skin: Material, s: RifleSpec): Group {
     part(g, black(), 0.035, 0.025, 0.035, 0, 0.16, -0.06);
     part(g, black(), 0.025, 0.035, 0.035, 0.024, 0.13, -0.06);
     part(g, black(), 0.02, 0.04, 0.02, 0, 0.1, -0.1); part(g, black(), 0.02, 0.04, 0.02, 0, 0.1, 0.02);
-  } else {
-    sights(g, tip + s.barrel * 0.15 + 0.06);
+  } else if (!s.handle) {
+    sights(g, tip + s.barrel * 0.15 + 0.06, { line: s.sightLine });
   }
   // Dark bore and retaining ring make the muzzle read as a tube.
   const muzzleZ = tip - (s.muzzle === 'suppressor' ? 0.14 : 0.008);
@@ -184,8 +206,11 @@ function pistol(skin: Material, o: { len: number; h: number; supp?: boolean; ext
   part(g, steel(), 0.005, 0.02, 0.007, 0, -0.013, -0.024, -0.2);
   for (let i = 0; i < 6; i++) for (const x of [-0.0175, 0.0175]) part(slide, black(), 0.002, o.h * 0.65, 0.003, x, 0.045, 0.022 - i * 0.007);
   part(slide, black(), 0.003, 0.014, 0.035, 0.018, 0.054, -0.04);
-  part(slide, black(), 0.026, 0.011, 0.012, 0, 0.045 + o.h / 2, 0.025);
-  part(slide, steel(), 0.005, 0.011, 0.009, 0, 0.045 + o.h / 2, -o.len + 0.052);
+  // Notched rear sight and front post of equal height: the sight line runs across their tops.
+  const top = 0.045 + o.h / 2, sh = 0.0085;
+  for (const x of [-0.0085, 0.0085]) part(slide, black(), 0.009, sh, 0.012, x, top + sh / 2, 0.025);
+  part(slide, steel(), 0.005, sh, 0.009, 0, top + sh / 2, -o.len + 0.052);
+  g.userData.ironY = top + sh;
   let tip = -o.len + 0.04;
   if (o.supp) { cyl(g, black(), 0.017, 0.13, 0, 0.05, tip - 0.06, 10); tip -= 0.13; }
   cyl(g, steel(), 0.008, 0.006, 0, 0.045, tip - 0.002);
@@ -213,7 +238,8 @@ function shotgun(skin: Material): Group {
   part(g, black(), 0.012, 0.027, 0.006, 0, -0.015, -0.055);
   part(g, black(), 0.004, 0.026, 0.08, 0.027, 0.046, -0.03);
   cyl(g, polymer(), 0.01, 0.003, 0, 0.06, -0.697, 20);
-  sights(g, -0.64);
+  // low bead-height sights along the rib, so a fitted red dot / holo sits clear above them
+  sights(g, -0.64, { rearBase: 0.075, line: 0.088 });
   g.userData.muzzle = new Vector3(0, 0.06, -0.7);
   g.userData.anchor = { railY: 0.078, railZ: -0.04, underY: 0.004, underZ: -0.3, sideX: 0.03, sideY: 0.06, sideZ: -0.48, stockZ: 0.3, barrelY: 0.06 } satisfies Anchor;
   return g;
@@ -221,7 +247,8 @@ function shotgun(skin: Material): Group {
 
 /** Belt-fed machine gun: rifle body + heat shroud, box magazine, feed cover and folded bipod. */
 function lmg(skin: Material, heavy: boolean): Group {
-  const g = rifle(skin, { recv: 0.38, barrel: heavy ? 0.44 : 0.36, hand: 0.2, stock: 'solid', mag: 'none', muzzle: heavy ? 'brake' : 'flash', handle: !heavy });
+  // the heavy gun's sights stand on risers above its feed cover
+  const g = rifle(skin, { recv: 0.38, barrel: heavy ? 0.44 : 0.36, hand: 0.2, stock: 'solid', mag: 'none', muzzle: heavy ? 'brake' : 'flash', handle: !heavy, sightLine: heavy ? 0.117 : undefined });
   const mag = g.getObjectByName('magazine') as Group;
   const boxM = heavy ? mat('w:olive', () => new MeshStandardMaterial({ color: '#4a5038', roughness: 0.75, metalness: 0.2 })) : polymer();
   part(mag, boxM, 0.075, 0.12, 0.13, -0.03, -0.05, -0.13);
@@ -239,7 +266,7 @@ function lmg(skin: Material, heavy: boolean): Group {
   // folded bipod
   for (const x of [-0.016, 0.016]) part(g, steel(), 0.008, 0.008, 0.26, x, 0.012, -0.5, 0.04);
   part(g, black(), 0.04, 0.02, 0.03, 0, 0.022, -0.37);
-  if (heavy) part(g, skin, 0.02, 0.035, 0.12, 0, 0.11, -0.2); // carry handle
+  if (heavy) part(g, skin, 0.02, 0.035, 0.12, -0.042, 0.07, -0.3); // carry handle, on the barrel's left side (clear of the sights)
   const an = g.userData.anchor as Anchor;
   g.userData.anchor = { ...an, railY: heavy ? 0.106 : 0.122, railZ: -0.06, underZ: -0.3, sideZ: -0.3 } satisfies Anchor;
   return g;
@@ -261,10 +288,15 @@ function thumper(skin: Material): Group {
   part(g, black(), 0.012, 0.006, 0.07, 0, -0.03, -0.02);
   part(g, black(), 0.012, 0.027, 0.006, 0, -0.016, -0.055);
   part(g, steel(), 0.006, 0.022, 0.008, 0, -0.012, -0.02, -0.25);
-  // flip-up ladder sight
-  part(g, steel(), 0.034, 0.05, 0.004, 0, 0.115, -0.13, -0.3);
+  // Flip-up ladder sight, raised: a frame with a notched cross-bar under the sight line, and a
+  // front post on the barrel whose tip sits on it. The HUD adds range marks for the shell's drop.
+  const line = 0.124;
   part(g, black(), 0.04, 0.008, 0.012, 0, 0.098, -0.12);
-  part(g, steel(), 0.005, 0.02, 0.006, 0, 0.1, -0.44);
+  for (const x of [-0.016, 0.016]) part(g, steel(), 0.004, 0.058, 0.004, x, 0.131, -0.13);
+  for (const x of [-0.009, 0.009]) part(g, steel(), 0.01, 0.006, 0.004, x, line - 0.003, -0.13);
+  part(g, steel(), 0.036, 0.004, 0.004, 0, 0.158, -0.13);
+  part(g, steel(), 0.005, line - 0.09, 0.006, 0, (line + 0.09) / 2, -0.44);
+  g.userData.ironY = line;
   g.userData.muzzle = new Vector3(0, 0.058, -0.48);
   return g;
 }
@@ -307,6 +339,11 @@ function disruptor(skin: Material): Group {
   part(mag, coil, 0.042, 0.085, 0.055, 0, -0.03, -0.03);
   part(g, polymer(), 0.036, 0.105, 0.045, 0, -0.045, 0.055, 0.25);
   part(g, skin, 0.028, 0.045, 0.15, 0, 0.118, -0.06);
+  // notch and glowing post on top of the housing
+  const top = 0.1405, sh = 0.0115;
+  for (const x of [-0.009, 0.009]) part(g, black(), 0.008, sh, 0.01, x, top + sh / 2, 0.008);
+  part(g, coil, 0.004, sh, 0.006, 0, top + sh / 2, -0.128);
+  g.userData.ironY = top + sh;
   part(g, black(), 0.012, 0.006, 0.06, 0, -0.02, 0.0);
   g.userData.muzzle = new Vector3(0, 0.062, -0.46);
   return g;

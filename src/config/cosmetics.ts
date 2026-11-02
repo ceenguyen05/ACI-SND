@@ -70,7 +70,9 @@ export interface CrosshairSettings {
   style: 'classic' | 'dot' | 'circle';
   color: string; size: number; gap: number; thickness: number;
   dot: boolean; outline: boolean; dynamic: boolean; alpha: number;
+  /** Move with the recoil to where the next bullet goes (off: stays centred, CS classic). */
+  followRecoil: boolean;
 }
 export const DEFAULT_CROSSHAIR: CrosshairSettings = {
-  style: 'classic', color: '#a4dfb7', size: 3, gap: 3, thickness: 1, dot: false, outline: true, dynamic: true, alpha: 1,
+  style: 'classic', color: '#a4dfb7', size: 3, gap: 3, thickness: 1, dot: false, outline: true, dynamic: true, alpha: 1, followRecoil: true,
 };

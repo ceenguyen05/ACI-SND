@@ -1,13 +1,13 @@
-import { AdditiveBlending, BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Group, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, SphereGeometry, Vector3 } from 'three';
+import { AdditiveBlending, BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Euler, Group, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, SphereGeometry, Vector2, Vector3 } from 'three';
 import { KillcamPlayer, KillcamRecorder, type AgentFrame, type ReplayEvent } from './Killcam';
 import { blobShadow } from './Textures';
 import { releaseModel } from './Geometry';
-import { WEAPONS } from '../config/weapons';
+import { WEAPONS, scopedView } from '../config/weapons';
 import { loadoutKey } from '../config/attachments';
 import { GADGETS, type GadgetId } from '../config/gadgets';
 import type { Shot } from '../sim/combat/Ordnance';
 import { deviceModel } from './GadgetModels';
-import { DEG, clamp, damp, wrapAngle } from '../core/math';
+import { DEG, clamp, damp, dirFromAngles, wrapAngle } from '../core/math';
 import { MOVE } from '../config/movement';
 import type { WeaponId } from '../config/weapons';
 import type { Agent } from '../sim/entities/Agent';
@@ -76,6 +76,15 @@ export class MatchView {
   };
   /** Glare on the local player's screen from an enemy weapon light (HUD draws it). */
   glare: { x: number; y: number; strength: number } | null = null;
+  /**
+   * Screen position (NDC, 0,0 = centre) the next shot goes to before spread. The camera shows only
+   * part of the recoil punch, so this climbs off-centre in a spray; the HUD crosshair, optic
+   * reticles and the view model's sights all sit on it.
+   */
+  readonly aimNdc = new Vector2();
+  private aimDir = new Vector3();
+  private aimQ = new Quaternion();
+  private aimEuler = new Euler();
   /** Short replay buffer + the killcam currently playing (null when live). */
   readonly recorder = new KillcamRecorder();
   killcam: KillcamPlayer | null = null;
@@ -467,6 +476,7 @@ export class MatchView {
     if (killer) vm.setArms(killer.look[f.team].primary, '#25272a');
     vm.leftHanded = s.leftHanded;
     vm.camera.fov = s.viewmodelFov; vm.camera.updateProjectionMatrix();
+    vm.setAim(0, 0);
     vm.setItem(f.held);
     vm.update({
       dt, speed: f.speed, maxSpeed: f.maxSpeed, onGround: f.onGround, crouch: f.duck, lookDX: 0, lookDY: 0,
@@ -591,7 +601,7 @@ export class MatchView {
     }
     if (!this.zombies) this.recorder.capture(this.match, (a) => this.heldKey(a), (a) => {
       const w = a.activeWeapon();
-      return w?.def.scope && a.wpn.scope > 0 ? w.def.scope.zooms[a.wpn.scope - 1] : a.wpn.ads ? 1.18 : 1;
+      return w?.def.scope && a.wpn.scope > 0 ? w.def.scope.zooms[a.wpn.scope - 1] : a.wpn.ads ? w?.def.ads?.zoom ?? 1.18 : 1;
     });
     if (this.viewAgent) {
       const a = this.viewAgent;
@@ -747,7 +757,7 @@ export class MatchView {
     );
 
     // camera
-    if (kc) this.frameKillcam(dt, kc, lookDelta);
+    if (kc) { this.aimNdc.set(0, 0); this.frameKillcam(dt, kc, lookDelta); }
     else this.updateCamera(dt, look, lookDelta);
     this.pings = this.pings.filter((p) => p.until > now);
     this.r.effects.update(dt, this.r.camera, this.r.height, this.r.camera.fov, kc ? kc.time : now);
@@ -905,6 +915,9 @@ export class MatchView {
     for (const [id, b] of this.beams) if (!seen.has(id)) { b.line.visible = b.dot.visible = b.cone.visible = b.flare.visible = false; }
   }
 
+  /** How far the view model's gun is raised to the eye (0 hip … 1 sights aligned). */
+  get adsBlend(): number { return this.r.viewModel.adsBlend; }
+
   zoomFactor(): number {
     const a = this.viewAgent;
     if (!a || !a.alive) return 1;
@@ -921,6 +934,7 @@ export class MatchView {
     this.shake = damp(this.shake, 0, 5, dt);
     this.landDip = damp(this.landDip, 0, 9, dt);
     this.stepOffset = damp(this.stepOffset, 0, 18, dt);
+    this.aimNdc.set(0, 0);
     const baseV = verticalFov(s.fov);
     if (this.freeCam || !a) {
       const f = this.freeCam ?? { pos: new Vector3(0, 30, 60), yaw: 0, pitch: -0.5 };
@@ -982,16 +996,24 @@ export class MatchView {
     const stun = a.stunAt(now0);
     const mantle = a.motor.mantle ? Math.min(1, a.motor.mantle.t / a.motor.mantle.dur) : 0;
     const wob = performance.now() / 1000;
+    const camPitch = pitch + punchP + Math.sin(wob * 1.9) * 0.035 * stun - Math.sin(Math.PI * mantle) * 0.12;
+    const camYaw = yaw + punchY + Math.sin(wob * 1.3) * 0.045 * stun;
+    const roll = -a.lean * MOVE.leanRollDeg * DEG * (1 - a.motor.prone) * (1 - a.motor.slidePose) + Math.sin(wob * 1.1) * 0.06 * stun + Math.sin(Math.PI * mantle) * 0.05;
     cam.position.copy(eye);
-    cam.rotation.set(
-      pitch + punchP + (Math.random() - 0.5) * sh * 0.05 + Math.sin(wob * 1.9) * 0.035 * stun - Math.sin(Math.PI * mantle) * 0.12,
-      yaw + punchY + (Math.random() - 0.5) * sh * 0.05 + Math.sin(wob * 1.3) * 0.045 * stun,
-      -a.lean * MOVE.leanRollDeg * DEG * (1 - a.motor.prone) * (1 - a.motor.slidePose) + Math.sin(wob * 1.1) * 0.06 * stun + Math.sin(Math.PI * mantle) * 0.05, 'YXZ',
-    );
+    cam.rotation.set(camPitch + (Math.random() - 0.5) * sh * 0.05, camYaw + (Math.random() - 0.5) * sh * 0.05, roll, 'YXZ');
     const zoom = this.zoomFactor();
     const targetFov = 2 * Math.atan(Math.tan((baseV * DEG) / 2) / zoom) / DEG;
     cam.fov = zoom > 1.5 ? targetFov : damp(cam.fov, targetFov, 18, dt);
     cam.updateProjectionMatrix();
+    // Where the next shot goes (view angles + full recoil punch + flinch), seen through the camera
+    // without its random shake (pure noise the bullets don't share). Only the camera smooths
+    // punch; sights use the full current punch so they never lag behind the actual next shot.
+    dirFromAngles(yaw + (a.aimPunchYaw + a.flinchYaw) * DEG, pitch + (a.aimPunchPitch + a.flinchPitch) * DEG, this.aimDir)
+      .applyQuaternion(this.aimQ.setFromEuler(this.aimEuler.set(camPitch, camYaw, roll, 'YXZ')).invert());
+    if (this.aimDir.z < -0.05) {
+      const t = Math.tan((cam.fov * DEG) / 2);
+      this.aimNdc.set(clamp(this.aimDir.x / -this.aimDir.z / (t * cam.aspect), -1, 1), clamp(this.aimDir.y / -this.aimDir.z / t, -1, 1));
+    }
 
     // view model
     const vm = this.r.viewModel;
@@ -1006,6 +1028,7 @@ export class MatchView {
     vm.leftHanded = s.leftHanded;
     vm.camera.fov = s.viewmodelFov;
     vm.camera.updateProjectionMatrix();
+    vm.setAim(this.aimNdc.x, this.aimNdc.y);
     vm.setArms(a.look[a.team].primary, '#25272a');
     vm.setItem(this.heldKey(a));
     const w = a.activeWeapon();
@@ -1017,7 +1040,7 @@ export class MatchView {
       dt, speed: a.speed2D, maxSpeed: a.maxSpeed(), onGround: a.motor.onGround, crouch: a.motor.duck,
       prone: a.motor.prone, slidePose: a.motor.slidePose,
       lookDX: isLocal ? lookDelta.dx : 0, lookDY: isLocal ? lookDelta.dy : 0,
-      ads: a.wpn.ads, scoped: (!!w?.def.scope && a.wpn.scope > 0) || (a.wpn.ads && w?.def.mods?.optic === 'acog'), reload: reloadP, draw: clamp(drawP, 0, 1),
+      ads: a.wpn.ads, scoped: scopedView(w?.def, a.wpn.ads, a.wpn.scope), reload: reloadP, draw: clamp(drawP, 0, 1),
       planting: a.isPlanting, defusing: a.isDefusing, throwPrimed: a.wpn.throwPrimed > 0,
       lateralSpeed: a.vel.x * Math.cos(yaw) - a.vel.z * Math.sin(yaw), verticalSpeed: a.vel.y,
       mantle, stun, busy: a.wpn.ads || reloadP > 0 || now - a.wpn.lastShot < 0.3 || drawP < 1,

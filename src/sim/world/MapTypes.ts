@@ -18,10 +18,11 @@ export interface FloorType {
 
 export type PropKind =
   | 'cubicle' | 'confTable' | 'reception' | 'sofa' | 'pillar' | 'planter' | 'vending' | 'copier' | 'cabinet'
-  | 'whiteboard' | 'counter' | 'fridge' | 'table' | 'serverRack' | 'crac' | 'mailShelf' | 'crate' | 'pallet'
-  | 'rack' | 'cnc' | 'press' | 'robotCell' | 'conveyor' | 'forklift' | 'barrels' | 'trailer' | 'boxTruck'
-  | 'dumpster' | 'car' | 'barrier' | 'partition' | 'tv' | 'logo' | 'packTable' | 'container' | 'console'
-  | 'bench' | 'cooler' | 'ups' | 'lightPole' | 'cart';
+  | 'whiteboard' | 'counter' | 'kitchenette' | 'fridge' | 'table' | 'serverRack' | 'crac' | 'mailShelf' | 'crate'
+  | 'pallet' | 'rack' | 'chamber' | 'burnIn' | 'rfChamber' | 'robotCell' | 'conveyor' | 'forklift' | 'barrels'
+  | 'trailer' | 'boxTruck' | 'dumpster' | 'car' | 'patrolCar' | 'speedTrailer' | 'barrier' | 'partition' | 'tv'
+  | 'logo' | 'packTable' | 'container' | 'console' | 'bench' | 'cooler' | 'ups' | 'lightPole' | 'cart'
+  | 'display' | 'speedSign' | 'fan';
 
 export interface PropDef {
   kind: PropKind;

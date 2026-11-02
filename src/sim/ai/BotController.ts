@@ -49,6 +49,13 @@ export class BotController {
   private standAndShoot = true;
   private semiToggle = false;
   private scopeToggleAt = 0;
+  private targetVisible = false;
+  private observedAim = new Vector3();
+  private observedVelocity = new Vector3();
+  private observedAt = 0;
+  private observeAt = 0;
+  private nextTriggerAt = 0;
+  private firingSince = -1;
 
   // misc
   private tasks: ThrowTask[] = [];
@@ -76,6 +83,8 @@ export class BotController {
     this.nextSlideAt = 0;
     this.yaw = this.agent.yaw; this.pitch = 0;
     this.target = null; this.lastSeen = null; this.heard = null;
+    this.targetVisible = false; this.observeAt = 0; this.nextTriggerAt = 0; this.firingSince = -1;
+    this.burstPauseUntil = 0; this.burstLeft = 0; this.semiToggle = false;
     this.path = null; this.goalX = NaN; this.tasks = [];
     this.bought = false; this.buyAt = this.m.time + 0.4 + this.m.rng.next() * 2.5;
     this.order = { kind: 'idle' };
@@ -188,11 +197,12 @@ export class BotController {
       if (score < bestScore) { bestScore = score; best = e; }
     }
     if (best) {
-      if (best !== this.target) this.acquire(best, 1);
+      if (best !== this.target || (!this.targetVisible && this.lastSeen && now - this.lastSeen.time > 0.1)) this.acquire(best, 1);
       this.lastSeen = { pos: best.pos.clone(), time: now, id: best.id };
     } else if (this.target && (!this.lastSeen || now - this.lastSeen.time > 0.3)) {
       this.target = null;
     }
+    this.targetVisible = best !== null;
     // recon pulse / radar intel → treat as heard
     if (!this.target) {
       for (const e of this.m.agents) {
@@ -263,13 +273,19 @@ export class BotController {
     const holding = a.speed2D < 0.8 && off < 25;
     const running = a.speed2D > 3;
     const angleMult = off > 40 ? 1.3 : 1;
-    const stateMult = holding ? 0.55 : running ? 1.25 : 1;
-    this.reactionAt = now + this.diff.reaction * reactionMult * (0.75 + rng.next() * 0.5) * angleMult * stateMult;
+    const stateMult = holding ? 0.9 : running ? 1.25 : 1;
+    const reaction = this.diff.reaction * reactionMult * (0.9 + rng.next() * 0.3) * angleMult * stateMult;
+    this.reactionAt = now + Math.max(this.diff.reaction * 0.8, reaction);
     const err = this.diff.aimError * (0.6 + rng.next() * 0.8) * (holding ? 0.6 : running ? 1.2 : 1);
     const ang = rng.next() * Math.PI * 2;
     this.errYaw = Math.cos(ang) * err;
     this.errPitch = Math.sin(ang) * err * 0.6;
     this.aimHead = rng.next() < this.diff.headRatio;
+    e.aimPoint(this.aimHead, this.observedAim);
+    this.observedVelocity.copy(e.vel); this.observedAt = now;
+    this.observeAt = now + this.diff.trackingDelay;
+    this.nextTriggerAt = this.reactionAt; this.firingSince = -1;
+    this.burstPauseUntil = 0;
     this.burstLeft = 0;
     this.crouchSpray = rng.next() < 0.35;
     const anchoring = (this.order.kind === 'hold' || this.order.kind === 'guard') && this.holdArrivedAt >= 0;
@@ -280,10 +296,23 @@ export class BotController {
   // ---------------------------------------------------------------- combat
   private engage(cmd: AgentCommand, dt: number) {
     const a = this.agent, e = this.target!, m = this.m, now = m.time;
+    // Brief memory keeps the search direction, never a live target position through cover.
+    if (!this.targetVisible) {
+      if (this.lastSeen) this.lookAt(this.lastSeen.pos.x, this.lastSeen.pos.y + 1, this.lastSeen.pos.z, dt, this.diff.aimSpeed);
+      this.firingSince = -1;
+      return;
+    }
     const eye = a.eyePos(tmp);
-    const aim = e.aimPoint(this.aimHead, tmp2);
-    const lead = 0.06;
-    const tx = aim.x + e.vel.x * lead, tz = aim.z + e.vel.z * lead;
+    if (now >= this.observeAt) {
+      e.aimPoint(this.aimHead, this.observedAim);
+      this.observedVelocity.copy(e.vel); this.observedAt = now;
+      this.observeAt = now + this.diff.trackingDelay;
+    }
+    const aim = this.observedAim;
+    // Estimate motion from the last observation, including some of the turn lag. Reversals
+    // still fool this estimate until the next observation; no perfect live-position tracking.
+    const lead = (now - this.observedAt + 1 / this.diff.aimSpeed) * Math.min(0.85, this.diff.sprayControl + 0.1);
+    const tx = aim.x + this.observedVelocity.x * lead, tz = aim.z + this.observedVelocity.z * lead;
     const dx = tx - eye.x, dy = aim.y - eye.y, dz = tz - eye.z;
     const horiz = Math.hypot(dx, dz);
     const dist = Math.hypot(horiz, dy);
@@ -293,8 +322,11 @@ export class BotController {
     const decay = Math.exp(-this.diff.errorDecay * dt);
     this.errYaw *= decay; this.errPitch *= decay;
     const comp = this.diff.sprayControl;
-    const aimYaw = wantYaw + this.errYaw * DEG - a.aimPunchYaw * DEG * comp;
-    const aimPitch = wantPitch + this.errPitch * DEG - a.aimPunchPitch * DEG * comp;
+    const phase = now * 2.4 + this.sweepPhase;
+    const driftYaw = this.diff.steadyError * (Math.sin(phase) + 0.35 * Math.sin(phase * 1.73));
+    const driftPitch = this.diff.steadyError * 0.6 * Math.cos(phase * 1.31);
+    const aimYaw = wantYaw + (this.errYaw + driftYaw) * DEG - a.aimPunchYaw * DEG * comp;
+    const aimPitch = wantPitch + (this.errPitch + driftPitch) * DEG - a.aimPunchPitch * DEG * comp;
     this.aimTowards(aimYaw, aimPitch, this.diff.aimSpeed, dt);
 
     // weapon readiness
@@ -313,8 +345,8 @@ export class BotController {
     // launchers are suicide up close: swap to the pistol
     if (w?.def.projectile && dist < 7 && usable(a.secondary)) { cmd.select = 'secondary'; w = null; }
 
-    // aim error check (without spray compensation)
-    const errAngle = Math.hypot(angleDiff(this.yaw + a.aimPunchYaw * DEG * comp, wantYaw), (this.pitch + a.aimPunchPitch * DEG * comp) - wantPitch);
+    // Commit to the imperfect aim estimate; waiting for exact alignment filters out every miss.
+    const errAngle = Math.hypot(angleDiff(this.yaw, aimYaw), this.pitch - aimPitch);
     const spraying = now - a.wpn.lastShot < 0.25;
     const tolerance = Math.atan2(this.aimHead ? 0.18 : 0.3, dist) + 0.004;
     const ready = now >= this.reactionAt && errAngle < tolerance * (spraying ? 2.6 : 1.2);
@@ -330,8 +362,7 @@ export class BotController {
         fire = a.wpn.scope > 0 || dist <= 5;
         if (a.speed2D > 1.2) fire = false;
       } else if (!def.auto) {
-        this.semiToggle = !this.semiToggle;
-        fire = this.semiToggle;
+        fire = true;
       } else if (dist > 26 && def.class !== 'smg') {
         // tap / burst at range
         if (now < this.burstPauseUntil) fire = false;
@@ -345,6 +376,21 @@ export class BotController {
         }
       } else fire = true;
     }
+    if (def && !def.auto) {
+      fire = fire && now >= this.nextTriggerAt && !this.semiToggle;
+      this.semiToggle = fire;
+      if (fire) this.nextTriggerAt = now + Math.max(this.diff.triggerInterval, 60 / def.rpm);
+    }
+    if (def?.auto && fire) {
+      if (now < this.burstPauseUntil) fire = false;
+      else {
+        if (this.firingSince < 0) this.firingSince = now;
+        if (now - this.firingSince >= this.diff.burstDuration) {
+          fire = false; this.firingSince = -1;
+          this.burstPauseUntil = now + this.diff.burstPause;
+        }
+      }
+    } else if (!spraying) this.firingSince = -1;
     cmd.fire = fire;
     // point blank: bash them with a quick melee (more often when the gun is empty or reloading)
     if (!isKnife && dist < 1.5 && now >= a.wpn.meleeReadyAt && this.m.rng.next() < (w && w.mag > 0 && a.wpn.reloadUntil <= now ? 0.04 : 0.3)) {

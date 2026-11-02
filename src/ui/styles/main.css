@@ -162,18 +162,28 @@ input, select { font-family: var(--font); }
 .flash-overlay { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 .smoke-overlay { position: absolute; inset: 0; background: #aeb3b6; opacity: 0; pointer-events: none; }
 .hurt-overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 160px rgba(200,0,0,.9); }
-.scope-overlay { position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(circle at center, transparent 0, transparent 34vh, #000 34.2vh); }
-.scope-overlay::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #000; }
-.scope-overlay::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: #000; }
+/* Sights (ui/hud/Sights.ts): each layer is moved onto the screen point the next shot goes to, so the
+   vignettes are oversized to never show an edge. */
+.sights { position: absolute; inset: 0; pointer-events: none; }
+.scope-overlay, .acog-overlay, .pgo-overlay { position: absolute; inset: 0; pointer-events: none; }
+.scope-vignette { position: absolute; inset: -45%;
+  background: radial-gradient(circle at center, transparent 0, transparent 33.6vh, rgba(0,0,0,.88) 34vh, #000 35vh); }
+.scope-reticle, .pgo-reticle { position: absolute; left: 50%; top: 50%; }
+.scope-spread { position: absolute; left: 50%; top: 50%; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0;
+  border: 1.5px solid rgba(255,255,255,.4); box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.4); transition: opacity .08s; }
+.scope-zoom { position: absolute; left: 50%; top: calc(50% + 27vh); transform: translateX(-50%); font: 600 12px/1 Bahnschrift, Arial;
+  letter-spacing: .12em; color: rgba(255,255,255,.6); text-shadow: 0 1px 2px #000; }
+.pgo-ring { position: absolute; inset: -45%;
+  background: radial-gradient(circle at center, rgba(255,214,150,.06) 0, rgba(255,214,150,.06) 29.4vh, rgba(0,0,0,.9) 30vh, #000 36vh); }
+.range-ladder { position: absolute; left: 0; top: 0; }
 .spectate { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,.55); padding: 8px 26px; font-size: 18px; letter-spacing: .08em; }
 .spectate small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .fps { position: absolute; right: 8px; bottom: 2px; font-size: 11px; color: #9a9; }
 .teamname { position: absolute; transform: translate(-50%, -100%); font-size: 12px; color: var(--ct); white-space: nowrap; }
 .radar { position: absolute; left: 16px; top: 16px; width: 200px; height: 200px; border-radius: 2px; overflow: hidden; background: rgba(10,17,22,.7); border: 1px solid rgba(212,226,223,.3); box-shadow: 0 2px 12px rgba(0,0,0,.2); }
 .radar canvas { width: 200px; height: 200px; display: block; }
-.crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-.crosshair canvas { position: absolute; left: -50px; top: -50px; width: 100px; height: 100px; }
+.crosshair { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.crosshair canvas { position: absolute; }
 .freeze-note { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); font-size: 15px; letter-spacing: .1em; color: var(--accent); }
 
 /* ------------------------------------------------------------------ buy menu / scoreboard / pause */
@@ -388,8 +398,7 @@ input, select { font-family: var(--font); }
   box-shadow: 0 0 6px 1px rgba(255,40,40,.85); pointer-events: none; }
 .reticle.holo { width: 34px; height: 34px; margin: -17px 0 0 -17px; background: transparent; border: 2px solid rgba(255,60,50,.9); box-shadow: 0 0 6px rgba(255,40,40,.6); }
 .reticle.holo::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #ff3a2a; box-shadow: 0 0 4px #ff2a2a; }
-.acog-overlay { position: absolute; inset: 0; pointer-events: none; }
-.acog-ring { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0, transparent 31vh, rgba(0,0,0,.92) 33vh, #000 40vh); }
+.acog-ring { position: absolute; inset: -45%; background: radial-gradient(circle at center, transparent 0, transparent 31vh, rgba(0,0,0,.92) 33vh, #000 40vh); }
 .acog-chevron { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin-left: -9px; border-left: 9px solid transparent; border-right: 9px solid transparent;
   border-bottom: 13px solid #ff5a22; filter: drop-shadow(0 0 3px rgba(255,90,30,.8)); }
 .acog-chevron::after { content: ''; position: absolute; left: -1px; top: 13px; width: 2px; height: 18vh; background: rgba(10,10,10,.85); }

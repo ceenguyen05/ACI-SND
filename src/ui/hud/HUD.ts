@@ -7,11 +7,10 @@ import { GADGETS, GADGET_ORDER, type GadgetId } from '../../config/gadgets';
 import { clamp, formatTime } from '../../core/math';
 import type { Match } from '../../sim/mode/Match';
 import type { Agent } from '../../sim/entities/Agent';
-import { inaccuracy } from '../../sim/combat/Ballistics';
 import { STREAKS, STREAK_ORDER, type StreakId } from '../../sim/mode/Killstreaks';
 import type { Settings } from '../../app/Profile';
 import { h, money, setText } from '../dom';
-import { drawCrosshair } from './Crosshair';
+import { Sights } from './Sights';
 import { Radar } from './Radar';
 import { weaponIcon } from './WeaponIcons';
 import { announcer } from '../../audio/Announcer';
@@ -44,10 +43,10 @@ export class HUD {
   private hint: HTMLElement;
   private stance: HTMLElement;
   private hitmarker: HTMLElement; private dmgInd: HTMLElement;
-  private flashOv: HTMLElement; private smokeOv: HTMLElement; private hurtOv: HTMLElement; private scopeOv: HTMLElement;
+  private flashOv: HTMLElement; private smokeOv: HTMLElement; private hurtOv: HTMLElement;
   private spectate: HTMLElement; private fps: HTMLElement;
   private killMark!: HTMLElement; private deathPanel!: HTMLElement; private deathUntil = 0;
-  private xhairCanvas: HTMLCanvasElement; private xhairBox: HTMLElement;
+  private sights = new Sights();
   private names: HTMLElement;
   private camOv: HTMLElement; private camTop: HTMLElement; private camList: HTMLElement; private camHint: HTMLElement;
   private radarJam: HTMLElement;
@@ -58,7 +57,7 @@ export class HUD {
   private hbPanel: HTMLCanvasElement;
   private pingLayer: HTMLElement;
   private stunOv: HTMLElement; private lowHpOv: HTMLElement;
-  private reticle: HTMLElement; private acogOv: HTMLElement; private lightOv: HTMLElement; private glareOv: HTMLElement;
+  private lightOv: HTMLElement; private glareOv: HTMLElement;
   private moment: HTMLElement; private momentUntil = 0;
   private clutchRound = -1; private lowHpBeat = 0;
   /** Set by the session so the HUD can show the killcam, pings and the heartbeat screen. */
@@ -72,7 +71,6 @@ export class HUD {
   private moneyDeltaUntil = 0;
   private fpsAcc = 0; private fpsFrames = 0;
   private unsub: (() => void)[] = [];
-  private lastXhairKey = '';
   /** Zombies mode: the S&D widgets (score, timer, money, kill feed, bomb markers) are hidden. */
   readonly zombies: boolean;
 
@@ -90,15 +88,12 @@ export class HUD {
     this.timer = h('div', { class: 'hud-timer' });
     this.aliveT = h('div', { class: 'hud-alive' }); this.aliveCT = h('div', { class: 'hud-alive' });
     this.progLabel = h('div'); this.progBar = h('i', { style: 'width:0%' });
-    this.xhairCanvas = h('canvas', { width: 100, height: 100 });
     this.radar = new Radar(match);
     this.el = h('div', { class: 'hud' },
       this.flashOv = h('div', { class: 'flash-overlay' }),
       this.smokeOv = h('div', { class: 'smoke-overlay' }),
       this.hurtOv = h('div', { class: 'hurt-overlay' }),
-      this.scopeOv = h('div', { class: 'scope-overlay hidden' }),
-      this.acogOv = h('div', { class: 'acog-overlay hidden' }, h('div', { class: 'acog-ring' }), h('div', { class: 'acog-chevron' })),
-      this.reticle = h('div', { class: 'reticle hidden' }),
+      this.sights.el,
       this.names = h('div'),
       this.radar.el,
       this.location = h('div', { class: 'location' }),
@@ -116,7 +111,6 @@ export class HUD {
       this.banner = h('div', { class: 'round-banner hidden' }),
       this.progress = h('div', { class: 'progress hidden' }, this.progLabel, h('div', { class: 'bar' }, this.progBar)),
       this.hint = h('div', { class: 'hint hidden' }),
-      this.xhairBox = h('div', { class: 'crosshair' }, this.xhairCanvas),
       this.hitmarker = h('div', { class: 'hitmarker' }),
       this.dmgInd = h('div', { class: 'dmg-ind' }, h('i')),
       this.camOv = h('div', { class: 'cam-overlay hidden' },
@@ -415,32 +409,21 @@ export class HUD {
     this.flashOv.style.opacity = String(flashA);
     this.smokeOv.style.opacity = String(Math.min(0.97, smokeDensity * 1.1));
 
-    // scope & crosshair
+    // crosshair, optics and scopes: all on the screen point the next shot goes to
     const w = a?.activeWeapon();
-    const scoped = !!a && a.alive && !!w?.def.scope && a.wpn.scope > 0;
-    this.scopeOv.classList.toggle('hidden', !scoped);
-    // Gunsmith optics: red dot / holo reticle when aiming, ACOG scope view
-    const optic = a && a.alive && a.wpn.ads && a.operating === null ? w?.def.mods?.optic : undefined;
-    this.acogOv.classList.toggle('hidden', optic !== 'acog');
-    this.reticle.classList.toggle('hidden', optic !== 'reddot' && optic !== 'holo');
-    this.reticle.classList.toggle('holo', optic === 'holo');
+    const sighted = !!a && a.alive && a.operating === null && !this.view?.killcam;
+    const aim = this.view?.aimNdc;
+    this.sights.update({
+      agent: sighted ? a : null, camera, aimX: aim?.x ?? 0, aimY: aim?.y ?? 0, ads: this.view?.adsBlend ?? (a?.wpn.ads ? 1 : 0),
+      crosshair: s.crosshair, menu: buyOpen,
+    });
+    this.hitmarker.style.transform = `translate(${this.sights.offset.x}px, ${this.sights.offset.y}px) translate(-50%, -50%) rotate(45deg)`;
     // weapon light: your own beam brightens the middle of the screen; an enemy beam glares
     this.lightOv.style.opacity = a && a.alive && a.lightOn && a.operating === null && w?.def.mods?.light ? '1' : '0';
     const glare = this.view?.glare;
     this.glareOv.style.opacity = glare ? String(Math.min(0.95, glare.strength)) : '0';
     if (glare) this.glareOv.style.background = `radial-gradient(circle at ${glare.x}px ${glare.y}px, #fff 0, rgba(255,255,248,.97) 9%, rgba(255,250,235,.7) 22%, rgba(255,245,225,.3) 42%, rgba(255,245,225,.08) 70%)`;
     this.glareOv.style.filter = glare ? `blur(${Math.round(2 + glare.strength * 4)}px)` : '';
-    const showX = !!a && a.alive && !scoped && !buyOpen && !(w?.def.scope) && !optic;
-    this.xhairBox.style.display = showX || (a?.alive && w?.def.scope && !scoped && false) ? '' : 'none';
-    if (showX && a) {
-      let spreadPx = 0;
-      if (w && w.def.class !== 'knife') {
-        const inacc = inaccuracy(w.def, a);
-        spreadPx = Math.min(30, Math.tan(inacc) * window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360)));
-      }
-      const key = JSON.stringify(s.crosshair) + Math.round(spreadPx);
-      if (key !== this.lastXhairKey) { drawCrosshair(this.xhairCanvas.getContext('2d')!, s.crosshair, Math.round(spreadPx)); this.lastXhairKey = key; }
-    }
 
     // spectate
     const spect = !!me && !me.alive && !!v && v !== me;
@@ -478,7 +461,6 @@ export class HUD {
       if (this.lastFeed !== feed.id) { this.camOv.classList.add('switch'); setTimeout(() => this.camOv.classList.remove('switch'), 120); }
     }
     this.lastFeed = feed?.id ?? null;
-    this.xhairBox.style.display = feed ? 'none' : this.xhairBox.style.display;
 
     // killstreaks
     this.renderStreaks(a, s);

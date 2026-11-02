@@ -1,5 +1,5 @@
 import type { Team } from '../config/rules';
-import type { SoundProfile } from '../config/weapons';
+import { scopedView, type SoundProfile } from '../config/weapons';
 import type { Agent } from '../sim/entities/Agent';
 import type { Match } from '../sim/mode/Match';
 
@@ -61,7 +61,7 @@ export class KillcamRecorder {
         deathVariant: a.killedBy >= 0 ? (a.id * 7 + Math.floor(a.deathTime * 13)) % 4 : 1,
         ex: eye.x, ey: eye.y, ez: eye.z,
         punchP: a.aimPunchPitch + a.flinchPitch, punchY: a.aimPunchYaw + a.flinchYaw,
-        ads: a.wpn.ads, scoped: !!w?.def.scope && a.wpn.scope > 0, zoom: zoom(a),
+        ads: a.wpn.ads, scoped: scopedView(w?.def, a.wpn.ads, a.wpn.scope), zoom: zoom(a),
       };
     });
     this.frames.push({ t: now, agents, events: this.pending });

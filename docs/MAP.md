@@ -3,12 +3,18 @@
 The map is a single-story headquarters, 120 m × 80 m, defined in [`src/sim/maps/aciHq.ts`](../src/sim/maps/aciHq.ts).
 Run `npm run map:ascii` to reprint the grid below.
 
+It is modelled on a 1981 single-story flex / R&D building in Richardson, Texas (about 40,000 sq ft
+on a 2.8-acre lot) where traffic radar, lidar and speed-sign electronics are designed, built and
+tested. The playable map is roughly 2.5× the real floor area, so the layout is game-first: the
+real building informs what is inside each room, not the room sizes.
+
 * **West half:** office. Engineering bullpen (**B site**), two conference rooms, an engineering
   cubicle block, break room, server room, mail room, and the main lobby (**Defender spawn**).
-* **East half:** manufacturing. Assembly line (**A site**), factory floor, warehouse racking,
-  and shipping & receiving with three loading docks.
-* **South strip:** outdoor loading yard (**Attacker spawn**), with trucks, a trailer, barriers
-  and a dumpster.
+* **East half:** production. Radar assembly line (**A site**), a test floor with environmental
+  chambers, burn-in racks and an RF test chamber, warehouse racking, and shipping & receiving
+  with three loading docks.
+* **South strip:** outdoor loading yard (**Attacker spawn**), with trucks, a trailer, barriers,
+  a dumpster, and staff parking (a demo patrol car, a sedan and a radar speed trailer).
 
 ```
     0         1         2         3         4         5         
@@ -74,12 +80,12 @@ Each cell is 2 m. North is up (−Z).
 
 | Callout | Where | Notes |
 |---|---|---|
-| **A Site** | NE assembly line | Conveyor (crouch cover), two CNC machines, a caged robot cell, crate stack, pillars |
-| **A Long** | Factory floor → A's south opening | Long sightline, hydraulic press, forklift, CNC rows |
+| **A Site** | NE assembly line | Conveyor (crouch cover) carrying radar units, two environmental test chambers, a caged robot test cell, crate stack, pillars |
+| **A Long** | Test floor → A's south opening | Long sightline, RF test chamber, forklift, rows of test chambers and burn-in racks |
 | **A Short** | Warehouse racks | Connects mid, A, the factory floor and shipping; tall racking with tight aisles |
 | **CT Lobby** | North center | Defender spawn; reception desk; doors to A ("ASSEMBLY · A") and Conference |
 | **Mid** | Central N–S hallway | 48 m sightline from the yard to the lobby, broken by the "mid doors" partition |
-| **B Site** | NW engineering bullpen | Four cubicle pods (1.4 m partitions: crouch to hide), whiteboard, cabinets |
+| **B Site** | NW engineering bullpen | Four cubicle pods (1.4 m partitions: crouch to hide; each desk has a 1 m entrance beside the spine), whiteboard, cabinets |
 | **B Hall** | North hall | Copier and vending machines; connects mid, Conference and B |
 | **Cubicles** | West center | Engineering cubicles; links mid, B Hall, Break Room and Mail Room |
 | **Break Room** | West | Kitchen counter, tables, vending; two doors into B |
@@ -125,6 +131,13 @@ Automated checks in `tests/map.test.ts` cover:
 * **Doors:** `g.door(...)` carves an opening and records a lintel height.
 * **Props:** world-space boxes `P(kind, x, z, w, d, h)`. Their visuals come from
   [`src/render/Props.ts`](../src/render/Props.ts), and their collision comes from the box itself.
+  Cubicle pods and the speed trailer are compound: their partitions, desks and panels come from
+  [`src/sim/world/PropShapes.ts`](../src/sim/world/PropShapes.ts), which both collision and visuals
+  read, so what you see is what you collide with.
+* **Motion:** fans, conveyor products, the test-cell robot, status LEDs and speed displays are
+  animated by [`src/render/MapAnimation.ts`](../src/render/MapAnimation.ts). It is cosmetic,
+  driven by wall-clock time, and never touches the simulation.
+* **Lighting:** prop changes alter the bake hash. Run `npm run bake` after editing props.
 * **Lights, spawns, buy zones, sites, plant spots, callouts and bot hold spots / routes** are
   plain data in the same file.
 

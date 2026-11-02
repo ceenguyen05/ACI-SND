@@ -173,6 +173,11 @@ export class Effects {
   tracer(start: Vector3, end: Vector3) {
     const tr = this.tracers.find((t) => t.t >= 1) ?? this.tracers[0];
     tr.start.copy(start); tr.end.copy(end); tr.t = 0; tr.len = start.distanceTo(end);
+    const arr = tr.line.geometry.getAttribute('position') as BufferAttribute;
+    arr.setXYZ(0, start.x, start.y, start.z);
+    const head = start.clone().lerp(end, Math.min(1, 1.5 / Math.max(0.001, tr.len)));
+    arr.setXYZ(1, head.x, head.y, head.z);
+    arr.needsUpdate = true;
     tr.line.visible = true;
   }
 
@@ -183,8 +188,11 @@ export class Effects {
     d.rotateZ(this.rng.next() * 6.28);
     d.visible = true;
     const soft = surface === 'fabric' || surface === 'wood';
-    this.dust.emit({ pos: point, count: soft ? 4 : 6, speed: 1.5, dir: normal, spread: 0.6, life: [0.3, 0.7], size: [0.08, 0.35], color: surface === 'wood' ? '#a07848' : '#9a968e', alpha: 0.6, gravity: 2, drag: 3 });
-    if (!soft) this.sparks.emit({ pos: point, count: 5, speed: 6, dir: normal, spread: 0.9, life: [0.08, 0.25], size: [0.05, 0.02], color: '#ffc870', gravity: 9 });
+    const metal = surface === 'metal' || surface === 'vehicle';
+    const glass = surface === 'glass';
+    d.scale.setScalar(soft ? 1.15 : metal ? 0.7 : 1);
+    this.dust.emit({ pos: point, count: glass ? 3 : soft ? 4 : 6, speed: 1.2, dir: normal, spread: 0.6, life: [0.12, 0.38], size: [0.045, 0.22], color: surface === 'wood' ? '#a07848' : '#aaa69e', alpha: 0.42, gravity: 2, drag: 4 });
+    if (metal || glass) this.sparks.emit({ pos: point, count: metal ? 7 : 4, speed: metal ? 6 : 3, dir: normal, spread: 0.75, life: [0.06, 0.2], size: [0.035, 0.008], color: glass ? '#d4eeff' : '#ffc870', gravity: 9 });
   }
 
   blood(point: Vector3, dir: Vector3, head: boolean) {
@@ -330,9 +338,8 @@ export class Effects {
     this.dust.update(dt);
     for (const tr of this.tracers) {
       if (tr.t >= 1) { tr.line.visible = false; continue; }
-      const speed = 380;
-      tr.t = Math.min(1, tr.t + (dt * speed) / Math.max(1, tr.len));
-      const head = Math.min(1, tr.t + 3 / Math.max(1, tr.len));
+      tr.t = Math.min(1, tr.t + dt / Math.max(0.045, tr.len / 700));
+      const head = Math.min(1, tr.t + 1.5 / Math.max(1, tr.len));
       const a = _p.copy(tr.start).lerp(tr.end, tr.t);
       const arr = (tr.line.geometry.getAttribute('position') as BufferAttribute);
       arr.setXYZ(0, a.x, a.y, a.z);

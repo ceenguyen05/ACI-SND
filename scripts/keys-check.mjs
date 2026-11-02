@@ -31,6 +31,7 @@ await page.evaluate(() => {
   match.events.on('gadgetDeploy', (e) => { if (e.agentId === p.id && e.kind === 'stim') window.__ev.dart++; });
   match.events.on('teamPing', (e) => { if (e.agentId === p.id) window.__ev.ping++; });
   // keep bots away so nothing interrupts the checks
+  for (const bot of match.bots.values()) bot.think = () => ({ ...bot.agent.cmd, fire: false, alt: false, forward: 0, right: 0, jump: false, use: false, select: null, selectGadget: null });
   for (const a of match.agents) if (a !== p) { a.health = 1e9; match.debugTeleport(a, a.team === 'T' ? -50 + a.id : 50 - a.id, 34, 0, 0); }
   p.health = 50;
 });
@@ -52,7 +53,11 @@ await step(null, 'KeyT', 400);
 await page.mouse.down({ button: 'middle' }); await page.waitForTimeout(60); await page.mouse.up({ button: 'middle' }); await page.waitForTimeout(300);
 // stim dart: equip the stim with 6 and fire with the mouse
 await page.evaluate(() => { const { match } = window.__aci; match.player.gadgets.stim = 3; match.player.stimReadyAt = 0; });
-await page.keyboard.press('Digit6'); await page.waitForTimeout(700);
+await page.keyboard.press('Digit6');
+await page.waitForFunction(() => {
+  const { match } = window.__aci, p = match.player;
+  return p.active === 'gadget' && p.activeGadget === 'stim' && match.time >= p.wpn.drawUntil && match.time >= p.stimReadyAt;
+}, undefined, { timeout: 5000 });
 await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up(); await page.waitForTimeout(400);
 // weapon light: a rifle with a Tactical Light from the Gunsmith, toggled with L
 await page.evaluate(() => {

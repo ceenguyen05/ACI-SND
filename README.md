@@ -109,10 +109,19 @@ Saved profiles that still have cameras on V are moved to T automatically, becaus
 * Next to a downed teammate, hold it to revive them.
 * **Tab** shows the squad board.
 
-**Aim assist** (Settings → Game): Off / Low (default) / Medium / High. Your crosshair slows
-down over a visible enemy, and you get a gentle, speed-limited pull toward their upper chest
-while you move the mouse or strafe. Walls, smoke, flashes and teammates switch it off, and it
-never applies to bots.
+**Aim assist** (Settings → Game): Off / Low (default) / Medium / High. Your aim slows down over a
+visible enemy, and you get a gentle, speed-limited pull toward the nearest part of their body
+(it never drags you off a headshot). While you move the mouse or strafe, it also helps you
+track a strafing target. It measures from where your bullets actually go, recoil included,
+and scopes soften the pull. Walls, smoke, flashes and teammates switch it off, and it never
+applies to bots.
+
+**Crosshair and sights.** The crosshair sits where your next bullet goes. It climbs with the
+recoil the camera doesn't show (turn off *Follow recoil* in Settings → Crosshair for a fixed
+one). Its gap is the real spread, including shotgun pellets and sniper no-scopes. Iron sights,
+red dots, holo, ACOG and sniper reticles all line up on the same point. Every gun's sight
+picture is clear. The Thumper and the Hammer's 2× scope show range marks for their shells'
+drop.
 
 ## Features
 
@@ -264,7 +273,8 @@ never applies to bots.
   * Team alive bars, round timer and bomb indicator.
   * Rotating radar, kill feed with headshot and assist icons, and teammate name tags.
   * Plant / defuse progress bars and damage-direction indicator.
-  * Flash and smoke screen effects, sniper scope overlay, and a dynamic crosshair.
+  * Flash and smoke screen effects; sniper, ACOG and rocket scopes; and a dynamic crosshair that
+    follows the recoil to where the bullet goes.
 * Buy menu, scoreboard (K/A/D, HS%, ADR, MVPs, round history), pause menu, and a match-end
   screen with career stats.
 * Synthesized 3D positional audio: gunshot types, surface-specific footsteps, bomb beeps,
@@ -363,6 +373,7 @@ ACI-SND/
 │  ├─ bake-lighting.mjs    # offline lightmap + probe baker (npm run bake)
 │  ├─ look.mjs             # quick in-game views at one quality preset
 │  ├─ arsenal-look.mjs     # buy menu, new view models, barricades, killstreak views
+│  ├─ sights-look.mjs      # every gun's hip / aimed sight picture + measured recoil alignment
 │  ├─ screenshots.mjs      # map & view-model visual tour
 │  ├─ balance.mjs          # long bot-vs-bot balance report
 │  └─ print-map.mjs        # ASCII map dump
@@ -388,6 +399,7 @@ multiplayer server unchanged.
 | `npm run perf` | FPS per graphics preset on your GPU |
 | `npm run bake` | Re-bake the map's lightmaps after changing the map (about 10 s) |
 | `node scripts/arsenal-look.mjs` | Screenshots of the buy menu, new view models, barricades, RPG blast and missile view (`screenshots/arsenal/`) |
+| `node scripts/sights-look.mjs [--spray] [--dpr=1.5]` | Every gun at the hip and aimed at a target, with 3× centre crops marked at the exact screen centre. `--spray` fires real bursts and prints how far the crosshair sits from the last impact (`screenshots/sights/`) |
 | `npm run test:handling` | Real keyboard/mouse movement, jump, crouch, hold-to-prone, release-to-stand, slide/cooldown, automatic fire, reload and ADS checks, plus screenshots and graphics-preset measurements in `screenshots/handling/` |
 | `npm run test:visual` | High-quality character poses, architecture, weapon animation, WebGL errors and repeated gadget cleanup; screenshots, a motion-review video and a JSON report in `screenshots/visual/` |
 | `npm run test:keys` | Presses the new combat keys in the real game (quick melee, self-stim, killstreak, C4 detonate, cameras, ping, stim dart, weapon light) and checks each one works |

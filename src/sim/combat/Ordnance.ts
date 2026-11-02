@@ -3,10 +3,10 @@ import type { Team } from '../../config/rules';
 import { WEAPONS, type WeaponDef, type WeaponId } from '../../config/weapons';
 import { GADGET_TUNING as G } from '../../config/gadgets';
 import { MAX_GRENADES, UTILITIES, UTILITY_TUNING as U } from '../../config/utilities';
-import { DEG, dirFromAngles } from '../../core/math';
+import { dirFromAngles } from '../../core/math';
 import type { Agent } from '../entities/Agent';
 import type { SimContext } from '../SimContext';
-import { traceBullet } from './Ballistics';
+import { shotAngles, traceBullet } from './Ballistics';
 import { explode } from './Explosion';
 
 export type ShotKind = 'rocket' | 'grenade' | 'plasma' | 'stim' | 'knife';
@@ -36,6 +36,31 @@ const dir = new Vector3();
 /** A thrown knife lying in the world, waiting to be picked up. */
 export interface KnifeDrop { id: number; pos: Vector3; dir: Vector3; stuck: boolean }
 
+/** Launched projectiles leave this far along the shot from the eye, and this far below it. */
+const MUZZLE_FORWARD = 0.45;
+const muzzleDrop = (kind: string) => (kind === 'rocket' ? 0.02 : 0.1);
+
+/**
+ * Holdover for a launcher: how far below the aim point (radians) the shell lands on a target
+ * `range` metres away along the line of sight at `pitch` (gravity drop plus the muzzle sitting
+ * under the eye). Put the target on the mark that far under the crosshair to hit it. NaN when the
+ * shell can't reach.
+ */
+export function launcherHoldover(def: WeaponDef, pitch: number, range: number): number {
+  const p = def.projectile;
+  if (!p) return 0;
+  const tx = range * Math.cos(pitch), ty = range * Math.sin(pitch), drop = muzzleDrop(p.kind);
+  // height of the shell above the eye once it has covered the target's horizontal distance
+  const heightAt = (a: number) => {
+    const c = Math.cos(a), x = tx - MUZZLE_FORWARD * c;
+    return Math.tan(a) * tx - drop - (p.gravity * x * x) / (2 * p.speed * p.speed * c * c);
+  };
+  let lo = pitch, hi = Math.min(pitch + 0.7, 1.45);
+  if (heightAt(hi) < ty) return NaN;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (heightAt(mid) < ty) lo = mid; else hi = mid; }
+  return (lo + hi) / 2 - pitch;
+}
+
 export class OrdnanceManager {
   shots: Shot[] = [];
   knives: KnifeDrop[] = [];
@@ -58,7 +83,8 @@ export class OrdnanceManager {
     const p = def.projectile!;
     const rng = this.ctx.rng;
     const ang = rng.next() * Math.PI * 2, r = rng.next() * spread;
-    const d = dirFromAngles(a.yaw + (a.aimPunchYaw + a.flinchYaw) * DEG + Math.cos(ang) * r, a.pitch + (a.aimPunchPitch + a.flinchPitch) * DEG + Math.sin(ang) * r, new Vector3());
+    const aim = shotAngles(a);
+    const d = dirFromAngles(aim.yaw + Math.cos(ang) * r, aim.pitch + Math.sin(ang) * r, new Vector3());
     this.spawn(a, p.kind, weaponId, d, p.speed);
     this.shots[this.shots.length - 1].proj = p;
   }
@@ -71,8 +97,8 @@ export class OrdnanceManager {
   private spawn(a: Agent, kind: ShotKind, weapon: WeaponId | 'stim' | 'tknife', d: Vector3, speed: number) {
     const eye = a.eyePos(new Vector3());
     const right = new Vector3(Math.cos(a.yaw), 0, -Math.sin(a.yaw));
-    const start = eye.clone().addScaledVector(d, 0.45).addScaledVector(right, kind === 'rocket' ? 0.18 : 0.1);
-    start.y -= kind === 'rocket' ? 0.02 : 0.1;
+    const start = eye.clone().addScaledVector(d, MUZZLE_FORWARD).addScaledVector(right, kind === 'rocket' ? 0.18 : 0.1);
+    start.y -= muzzleDrop(kind);
     if (this.ctx.world.collision.segmentBlocked(eye, start)) start.copy(eye);
     this.shots.push({ id: NEXT++, kind, weapon, ownerId: a.id, team: a.team, pos: start, vel: d.multiplyScalar(speed), born: this.ctx.time, travelled: 0, bounces: 0 });
   }

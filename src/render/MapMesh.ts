@@ -7,6 +7,8 @@ import { Batcher, MaterialLib } from './Materials';
 import { buildProp } from './Props';
 import { TEX, contactShadow, signTexture, siteDecal } from './Textures';
 import { dressWall } from './Architecture';
+import { MapAnimator } from './MapAnimation';
+import { buildSurroundings } from './Surroundings';
 import type { BakedLighting } from './lighting/BakedLighting';
 import { regionUV, wallFaces } from './lighting/LightLayout';
 
@@ -15,6 +17,9 @@ export interface MapVisual {
   lights: Light[];
   sun: DirectionalLight;
   updateLights(position: Vector3): void;
+  /** Advance cosmetic map motion (fans, conveyors, LEDs, displays) to wall-clock time `t` seconds. */
+  animate(t: number): void;
+  dispose(): void;
 }
 
 function quadGeo(p: number[][], n: [number, number, number], uv: number[][], col: number[], uv1?: number[][]): BufferGeometry {
@@ -176,8 +181,11 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
   }
 
   // ---------------------------------------------------------------- props
+  const anim = new MapAnimator(lib);
   let seed = 1;
-  for (const p of map.props) buildProp(statics, p, seed++);
+  for (const p of map.props) buildProp(statics, p, seed++, anim);
+  anim.finish();
+  buildSurroundings(statics, world);
 
   // Contact shadows under props stay visible indoors, where the roof blocks the sun.
   const grounded = map.props.filter((p) => (p.y ?? 0) < 0.1 && p.w > 0.3 && p.d > 0.3);
@@ -200,6 +208,8 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
   group.add(ceilGroup);
   group.traverse((o) => { if ((o as Mesh).isMesh) o.castShadow = true; });
   contacts.castShadow = false;
+  // Moving parts stay out of the (static, update-once) sun shadow map.
+  group.add(anim.group);
 
   // ---------------------------------------------------------------- decals (site letters, zone paint, lines)
   const decalMat = (color: string) => new MeshBasicMaterial({ color, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
@@ -277,7 +287,7 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
   sign('ASSEMBLY · A', 17.98, 3.5, -28, W, 2.6, 0.5, '#e8b818', '#151515');
   sign('WAREHOUSE', 1.98, 3.2, -8, W, 2.0, 0.35);
   sign('BREAK ROOM', -36, 2.9, -12.02, N, 1.8);
-  sign('B SITE →', -29.98, 2.9, -31, W, 1.8, 0.38, '#7a1c18', '#ffffff');
+  sign('B SITE', -28.02, 2.9, -31, E, 1.6, 0.38, '#7a1c18', '#ffffff');
   sign('A LONG ↑', 54, 5.6, -11.98, S, 2.4, 0.5, '#e8b818', '#151515');
   sign('A', 24, 3.2, -37.94, S, 1.7, 2.1, '#a95735', '#ede3d2');
   sign('B', -52, 2.2, -37.94, S, 1.2, 1.5, '#3c6476', '#e4e7dc');
@@ -288,6 +298,13 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
   logo.position.set(4, 3.3, -37.88);
   group.add(logo);
   sign('A-CONCEPTS INDUSTRIES', 4, 1.95, -37.87, S, 5, 0.4, '#14181f', '#c8ccd4');
+  sign('RADAR  ·  LIDAR  ·  SPEED SENSORS', 4, 1.5, -37.87, S, 5, 0.3, '#14181f', '#f0a020');
+  // Electronics plant signage: ESD-safe assembly, quality certification, made-in-USA production.
+  sign('ESD PROTECTED AREA', 20.02, 3.35, -28, E, 2.4, 0.45, '#f2c230', '#151515');
+  sign('ESD PROTECTED AREA', 20.02, 3.85, -18, E, 2.4, 0.45, '#f2c230', '#151515');
+  sign('ISO 9001:2015 CERTIFIED', 57.93, 5.2, -6, W, 4.4, 0.62, '#1f3550', '#f2f2f2');
+  sign('MADE IN TEXAS  ·  U.S.A.', 28, 5.6, 8.02, S, 5.2, 0.7, '#7a1c18', '#f4f1e6');
+  sign('RF TEST LAB', 45, 3.55, -8.03, N, 1.8, 0.42, '#384549', '#d5d7c6');
 
   // ---------------------------------------------------------------- sky dome
   const sky = new Mesh(new SphereGeometry(400, 24, 12), new MeshBasicMaterial({ map: TEX.sky().tex, side: BackSide, depthWrite: false, fog: false }));
@@ -304,7 +321,7 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
     key.position.set(0.35, 1, 0.55);
     const sunB = new DirectionalLight(0xffe3bb, 0);
     lights.push(hemi, key, new AmbientLight(0xffffff, Math.PI * 0.12), sunB);
-    return { group, lights, sun: sunB, updateLights: () => {} };
+    return { group, lights, sun: sunB, updateLights: () => {}, animate: (t) => anim.animate(t), dispose: () => anim.dispose() };
   }
   const hemi = new HemisphereLight(0xdde8f0, 0x655f51, opts.pointLights ? 1.05 : 1.6);
   lights.push(hemi);
@@ -337,5 +354,5 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
       light.intensity = source.intensity; light.distance = source.distance;
     }
   };
-  return { group, lights, sun, updateLights };
+  return { group, lights, sun, updateLights, animate: (t) => anim.animate(t), dispose: () => anim.dispose() };
 }

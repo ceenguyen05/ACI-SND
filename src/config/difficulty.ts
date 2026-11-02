@@ -11,11 +11,20 @@ export interface DifficultyDef {
   counterStrafe: boolean;  // stops before shooting
   headRatio: number;       // probability of aiming at the head
   utilityUse: number;      // 0..1
+  trackingDelay: number;   // seconds between observed target positions
+  steadyError: number;     // persistent angular drift, degrees (never decays to perfect aim)
+  triggerInterval: number; // minimum spacing of semi-auto trigger pulls
+  burstDuration: number;   // longest continuous automatic burst
+  burstPause: number;      // recovery between bursts
 }
 
 export const DIFFICULTY: Record<BotDifficulty, DifficultyDef> = {
-  easy: { label: 'Easy', reaction: 0.75, aimSpeed: 4, aimError: 7, errorDecay: 0.8, sprayControl: 0.1, fov: 100, counterStrafe: false, headRatio: 0.1, utilityUse: 0.2 },
-  normal: { label: 'Normal', reaction: 0.45, aimSpeed: 7, aimError: 4.5, errorDecay: 1.5, sprayControl: 0.45, fov: 115, counterStrafe: false, headRatio: 0.3, utilityUse: 0.5 },
-  hard: { label: 'Hard', reaction: 0.28, aimSpeed: 11, aimError: 2.8, errorDecay: 2.5, sprayControl: 0.75, fov: 125, counterStrafe: true, headRatio: 0.5, utilityUse: 0.75 },
-  expert: { label: 'Expert', reaction: 0.18, aimSpeed: 16, aimError: 1.6, errorDecay: 4, sprayControl: 0.92, fov: 135, counterStrafe: true, headRatio: 0.7, utilityUse: 0.9 },
+  easy: { label: 'Easy', reaction: 0.95, aimSpeed: 3.4, aimError: 8, errorDecay: 0.65, sprayControl: 0.06, fov: 100, counterStrafe: false, headRatio: 0.04, utilityUse: 0.2,
+    trackingDelay: 0.28, steadyError: 1.8, triggerInterval: 0.32, burstDuration: 0.38, burstPause: 0.5 },
+  normal: { label: 'Normal', reaction: 0.62, aimSpeed: 5.5, aimError: 5.5, errorDecay: 1.1, sprayControl: 0.3, fov: 110, counterStrafe: false, headRatio: 0.14, utilityUse: 0.5,
+    trackingDelay: 0.22, steadyError: 1.1, triggerInterval: 0.24, burstDuration: 0.5, burstPause: 0.38 },
+  hard: { label: 'Hard', reaction: 0.4, aimSpeed: 8, aimError: 3.6, errorDecay: 1.8, sprayControl: 0.58, fov: 120, counterStrafe: true, headRatio: 0.28, utilityUse: 0.75,
+    trackingDelay: 0.16, steadyError: 0.65, triggerInterval: 0.18, burstDuration: 0.65, burstPause: 0.28 },
+  expert: { label: 'Expert', reaction: 0.28, aimSpeed: 11, aimError: 2.3, errorDecay: 2.7, sprayControl: 0.76, fov: 125, counterStrafe: true, headRatio: 0.42, utilityUse: 0.9,
+    trackingDelay: 0.12, steadyError: 0.38, triggerInterval: 0.14, burstDuration: 0.8, burstPause: 0.2 },
 };

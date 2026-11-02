@@ -56,6 +56,7 @@ export class GameRenderer {
   /** (Re)build the static map visuals for a quality preset. */
   loadMap(world: World, quality: 'low' | 'medium' | 'high') {
     if (this.map) {
+      this.map.dispose();
       this.scene.remove(this.map.group);
       for (const l of this.map.lights) this.scene.remove(l);
       const materials = new Set<import('three').Material>();
@@ -107,6 +108,7 @@ export class GameRenderer {
     const r = this.renderer;
     r.info.reset();
     this.map?.updateLights(this.camera.position);
+    this.map?.animate(performance.now() / 1000);
     if (this.post) this.post.render(r, this.scene, this.camera);
     else { r.clear(); r.render(this.scene, this.camera); }
     if (this.showViewModel) {

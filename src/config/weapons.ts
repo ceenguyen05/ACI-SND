@@ -70,6 +70,8 @@ export interface WeaponDef {
   blurb: string;
   /** Aim-down-sights tuning (optics change it; iron sights when absent). */
   ads?: { zoom: number; spread: number; move: number };
+  /** Built-in aiming optic (the rocket launcher's PGO-style scope). */
+  optic?: 'pgo';
   /** Attachment effects that aren't plain stat changes (see config/attachments.ts). */
   mods?: {
     penMul: number; laser?: 'red' | 'green'; light?: boolean; bipod?: boolean; optic?: 'reddot' | 'holo' | 'acog';
@@ -279,7 +281,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { base: 1, stand: 5, crouch: 3, move: 60, air: 200, perShot: 10, recovery: 0.6 },
     recoil: recoil({ climb: 3, climbShots: 1, lateClimb: 0, sway: 0.3, swayPeriod: 2, jitter: 0.3, kick: 3.2, seed: 72 }),
     projectile: { kind: 'rocket', speed: 52, gravity: 1.5, radius: 5.5, damage: 170, armDistance: 4 },
-    sound: 'rocket', blurb: 'Shoulder-fired rocket. Devastating splash, shreds barricades and gadgets. 2 spare rockets.',
+    ads: { zoom: 2, spread: 0.75, move: 0.8 }, optic: 'pgo',
+    sound: 'rocket', blurb: 'Shoulder-fired rocket with a 2× ranging scope. Devastating splash, shreds barricades and gadgets. 2 spare rockets.',
   },
   disruptor: {
     id: 'disruptor', name: 'Disruptor X-1', class: 'launcher', slot: 'primary', team: 'both', price: 0, killReward: 0,
@@ -297,6 +300,19 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 export const WEAPON_LIST = Object.values(WEAPONS).filter((w) => !w.zombiesOnly);
 
 export const DEFAULT_PISTOL: Record<Team, WeaponId> = { T: 'k9', CT: 'warden' };
+
+/** The optic you look through when aiming: a fitted Gunsmith optic or the gun's built-in one. */
+export function adsOptic(def: WeaponDef | undefined): 'reddot' | 'holo' | 'acog' | 'pgo' | undefined {
+  return def?.mods?.optic ?? def?.optic;
+}
+
+/** True when the view is a full-screen scope picture (sniper scope, ACOG, launcher scope) instead of the gun. */
+export function scopedView(def: WeaponDef | undefined, ads: boolean, scope: number): boolean {
+  if (!def) return false;
+  if (def.scope) return scope > 0;
+  const optic = adsOptic(def);
+  return ads && (optic === 'acog' || optic === 'pgo');
+}
 
 export function availableTo(def: { team: Team | 'both' }, team: Team): boolean {
   return def.team === 'both' || def.team === team;

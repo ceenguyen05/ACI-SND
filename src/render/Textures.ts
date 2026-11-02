@@ -317,9 +317,25 @@ export const TEX = {
   }),
   machineBadge: () => make('machine-badge', [512, 128], 0.62, 0.16, (g, w, h) => {
     fill(g, w, h, '#26343b');
-    g.fillStyle = '#c1c9bd'; g.font = 'bold 42px sans-serif'; g.fillText('ACI INDUSTRIAL', 22, 53);
-    g.fillStyle = '#8caaa9'; g.font = '20px monospace'; g.fillText('AX-750  /  PRECISION SYSTEMS', 24, 97);
+    g.fillStyle = '#c1c9bd'; g.font = 'bold 42px sans-serif'; g.fillText('ACI TEST SYSTEMS', 22, 53);
+    g.fillStyle = '#8caaa9'; g.font = '20px monospace'; g.fillText('ENV-750  /  -40 TO +85 C', 24, 97);
     g.fillStyle = '#b99656'; g.fillRect(0, h - 8, w, 8);
+  }),
+  /** Regulatory plate on the radar speed trailer (one texture repeat = the 0.6 x 0.72 m plate). */
+  speedLimit: () => make('label-speed-limit', [256, 308], 0.6, 0.72, (g, w, h) => {
+    fill(g, w, h, '#f3f3ee');
+    g.strokeStyle = '#151515'; g.lineWidth = 9; g.strokeRect(12, 12, w - 24, h - 24);
+    g.fillStyle = '#151515'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 52px Arial, sans-serif'; g.fillText('SPEED', w / 2, 62); g.fillText('LIMIT', w / 2, 118);
+    g.font = 'bold 140px Arial, sans-serif'; g.fillText('30', w / 2, 220);
+  }),
+  /** Door placard on the RF test chamber (0.9 x 0.36 m). */
+  rfPlacard: () => make('label-rf', [512, 204], 0.9, 0.36, (g, w, h) => {
+    fill(g, w, h, '#efc02c');
+    g.strokeStyle = '#151515'; g.lineWidth = 10; g.strokeRect(8, 8, w - 16, h - 16);
+    g.fillStyle = '#151515'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 54px Arial, sans-serif'; g.fillText('RF TEST CHAMBER', w / 2, 72);
+    g.font = 'bold 28px Arial, sans-serif'; g.fillText('KEEP DOOR CLOSED DURING TEST', w / 2, 140);
   }),
   hazard: () => make('hazard', 128, 0.5, 0.5, (g, w, h) => {
     fill(g, w, h, '#e8b818');

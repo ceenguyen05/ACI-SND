@@ -1,5 +1,5 @@
 import {
-  AdditiveBlending, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera,
+  AdditiveBlending, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera,
   Scene, Sprite, SpriteMaterial, Vector3,
 } from 'three';
 import { WEAPONS, type WeaponId } from '../config/weapons';
@@ -40,10 +40,23 @@ export interface ViewModelState {
 
 type ItemKind = 'rifle' | 'pistol' | 'knife' | 'grenade' | 'bomb' | 'none';
 
+const FORWARD = new Vector3(0, 0, -1), aimDir = new Vector3(), pivotTmp = new Matrix4();
+
+/**
+ * Where the eye sits in a held gun's own frame when aimed: on the fitted optic's sight line, else
+ * on the model's iron sights (`userData.ironY`), a little behind the grip.
+ */
+export function aimedEye(model: { sightY?: unknown; ironY?: unknown }, pistol: boolean, out = new Vector3()): Vector3 {
+  const y = typeof model.sightY === 'number' ? model.sightY + 0.002 : typeof model.ironY === 'number' ? model.ironY : pistol ? 0.071 : 0.102;
+  return out.set(0, y, pistol ? 0.36 : 0.33);
+}
+
 /** First-person arms + weapon rendered in its own scene (never clips into walls). */
 export class ViewModel {
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(60, 1, 0.01, 20);
+  /** Turns the whole gun about the eye so its sights point where the next bullet goes (see setAim). */
+  private aim = new Group();
   private rig = new Group();
   private holder = new Group();
   private armR = new Group();
@@ -68,8 +81,6 @@ export class ViewModel {
   private suppressed = false;
   private noShells = false;
   private smallFlash = false;
-  /** Sight line height of the fitted optic (null = iron sights). */
-  private sightY: number | null = null;
   private launcher = false;
   /** Quick melee: the gun dips out of view while a knife (or crowbar) thrusts in from the right. */
   private meleeRig = new Group();
@@ -112,7 +123,8 @@ export class ViewModel {
     d.position.set(-1, 2, 1);
     this.scene.add(d);
     this.scene.add(this.camera);
-    this.camera.add(this.rig);
+    this.camera.add(this.aim);
+    this.aim.add(this.rig);
     this.rig.add(this.holder, this.armL);
     this.holder.add(this.armR);
     this.meleeKnife = weaponModel('knife');
@@ -216,7 +228,6 @@ export class ViewModel {
     this.muzzleLocal.copy(this.item.userData.muzzle ?? new Vector3());
     this.suppressed = !!this.item.userData.suppressed;
     this.smallFlash = !!this.item.userData.smallFlash;
-    this.sightY = typeof this.item.userData.sightY === 'number' ? this.item.userData.sightY : null;
     this.magazine = this.item.getObjectByName('magazine') ?? null;
     this.slide = this.item.getObjectByName('slide') ?? null;
     this.bolt = this.item.getObjectByName('bolt') ?? null;
@@ -237,13 +248,15 @@ export class ViewModel {
     this.kickRot = Math.min(0.23, this.kickRot + 0.045 * kick);
     this.actionT = 0;
     if (this.kind === 'rifle' || this.kind === 'pistol') {
-      this.flashT = this.suppressed ? 0.018 : this.launcher ? 0.07 : this.noShells ? 0 : 0.035;
-      this.flash.scale.setScalar(this.suppressed ? 0.035 : this.launcher ? 0.32 : (this.kind === 'pistol' ? 0.095 : 0.14) * (this.smallFlash ? 0.45 : 1));
+      this.flashT = this.suppressed ? 0.014 : this.launcher ? 0.07 : this.noShells ? 0 : 0.026;
+      const size = this.suppressed ? 0.035 : this.launcher ? 0.32 : (this.kind === 'pistol' ? 0.095 : 0.14) * (this.smallFlash ? 0.45 : 1);
+      const sightClearance = 1 - this.adsT * 0.4;
+      this.flash.scale.set(size * 0.65 * sightClearance, size * sightClearance, 1);
       this.flash.material.rotation = Math.random() * Math.PI * 2;
       if (this.noShells) return;
       const shell = this.shells[this.shellCursor++ % this.shells.length];
-      this.rig.updateMatrix();
-      shell.p.set(0.035, 0.045, -0.055).applyMatrix4(this.rig.matrix);
+      this.rig.updateMatrix(); this.aim.updateMatrix();
+      shell.p.set(0.035, 0.045, -0.055).applyMatrix4(this.rig.matrix).applyMatrix4(this.aim.matrix);
       shell.v.set((this.leftHanded ? -1 : 1) * (0.65 + Math.random() * 0.4), 0.45 + Math.random() * 0.45, 0.15);
       shell.r.set(0, 0, 0); shell.life = 0.65;
     }
@@ -257,6 +270,20 @@ export class ViewModel {
   onLand() { this.landT = 1; }
 
   setAspect(a: number) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }
+
+  /** How far the gun is raised to the eye (0 = hip, 1 = sights aligned). */
+  get adsBlend() { return this.adsT; }
+
+  /**
+   * Point the gun at a screen position (NDC, 0,0 = centre): where the next bullet goes. The view
+   * model has its own FOV, so the angle is converted to land on the same pixel. Aimed, the sight
+   * line passes through the eye, so the front post / dot sits exactly on that point.
+   */
+  setAim(x: number, y: number) {
+    const t = Math.tan(this.camera.fov * Math.PI / 360);
+    aimDir.set(x * t * this.camera.aspect, y * t, -1).normalize();
+    this.aim.quaternion.setFromUnitVectors(FORWARD, aimDir);
+  }
 
   private updateShells(dt: number) {
     for (let i = 0; i < this.shells.length; i++) {
@@ -295,6 +322,7 @@ export class ViewModel {
     this.mantleT = damp(this.mantleT, s.mantle ? Math.sin(Math.PI * Math.min(1, s.mantle)) : 0, 18, dt);
     this.flashT -= dt;
     this.flash.visible = this.flashT > 0;
+    this.flash.material.opacity = Math.min(1, Math.max(0, this.flashT / 0.012));
     this.actionT = Math.min(1, this.actionT + dt / this.cycleDuration);
     const cycle = Math.sin(Math.PI * Math.max(0, Math.min(1, (this.actionT - (this.cycleDuration > 0.2 ? 0.18 : 0)) / (this.cycleDuration > 0.2 ? 0.82 : 1))));
     if (this.slide) this.slide.position.z = cycle * 0.033;
@@ -311,16 +339,20 @@ export class ViewModel {
         : this.kind === 'grenade' ? new Vector3(0.17, -0.17, -0.4)
           : this.kind === 'bomb' ? new Vector3(0.05, -0.24, -0.42)
             : this.launcher ? new Vector3(0.16, -0.16, -0.46) : new Vector3(0.17, -0.175, -0.51);
-    // with an optic, line the eye up with the optic instead of the iron sights
-    const adsPos = new Vector3(0, this.sightY !== null ? -(this.sightY + 0.002) : this.kind === 'pistol' ? -0.071 : -0.102, this.kind === 'pistol' ? -0.3 : -0.33);
+    // Aimed, the eye sits on the sight line (the optic's, else the model's iron sights).
+    const adsPos = aimedEye(this.item?.userData ?? {}, this.kind === 'pistol').negate();
     const p = base.clone().lerp(adsPos, this.adsT);
     p.x *= side;
     const prone = s.prone ?? 0, slidePose = s.slidePose ?? 0;
+    // Hip-fire motion fades out as the sights come up: offsets that would move the eye off the
+    // sight line go entirely, sway keeps a little inertia, and the visible recoil comes from the
+    // aim pivot (the gun turning to where the bullets go) instead of a free kick.
+    const hip = 1 - this.adsT, loose = 1 - 0.8 * this.adsT;
     const bobAmt = (1 - this.adsT * 0.9) * this.moveT * (1 - slidePose) * (1 - prone * 0.6);
-    p.x += Math.sin(this.bobT) * 0.007 * bobAmt + this.swayX - this.strafeT * 0.008;
-    p.y += Math.cos(this.bobT * 2) * 0.004 * bobAmt + this.swayY - this.landT * 0.025 - s.crouch * 0.006 - this.airT * 0.012;
+    p.x += Math.sin(this.bobT) * 0.007 * bobAmt + (this.swayX - this.strafeT * 0.008) * hip;
+    p.y += Math.cos(this.bobT * 2) * 0.004 * bobAmt + (this.swayY - this.landT * 0.025 - s.crouch * 0.006 - this.airT * 0.012) * hip;
     p.z += this.kick;
-    let rx = this.kickRot + this.swayY * 2 + this.airT * 0.035, ry = this.swayX * 2 + (1 - this.adsT) * 0.09, rz = -this.strafeT * 0.025;
+    let rx = (this.kickRot + this.airT * 0.035) * hip + this.swayY * 2 * loose, ry = this.swayX * 2 * loose + hip * 0.09, rz = -this.strafeT * 0.025 * hip;
     p.y -= slidePose * 0.035 * (1 - this.adsT);
     rz += slidePose * 0.08 * (1 - this.adsT) * side;
     // draw animation
@@ -390,7 +422,7 @@ export class ViewModel {
 
   /** Muzzle position in view-camera space (for tracer start in world). */
   muzzleCamSpace(out: Vector3): Vector3 {
-    this.rig.updateMatrix(); this.holder.updateMatrix();
-    return out.copy(this.muzzleLocal).applyMatrix4(this.holder.matrix).applyMatrix4(this.rig.matrix);
+    this.rig.updateMatrix(); this.holder.updateMatrix(); this.aim.updateMatrix();
+    return out.copy(this.muzzleLocal).applyMatrix4(pivotTmp.multiplyMatrices(this.aim.matrix, this.rig.matrix).multiply(this.holder.matrix));
   }
 }

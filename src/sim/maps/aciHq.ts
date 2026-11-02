@@ -1,11 +1,13 @@
 import type { DoorDef, FloorType, MapDef, PropDef } from '../world/MapTypes';
 
 /**
- * ACI HQ — single-story office + manufacturing plant.
+ * ACI HQ — single-story office + manufacturing plant, modelled on a 1981 Richardson, TX
+ * flex / R&D building where traffic radar, lidar and speed-sign electronics are designed,
+ * built and tested. The game map is larger than the real ~40,000 sq ft building.
  *
  * World: 120 m (X, west→east) × 80 m (Z, north→south). Grid cell = 2 m, 60 × 40 cells.
  * West half  : office (B site bullpen, conference rooms, engineering cubicles, break room, server room, mail room).
- * East half  : manufacturing (A site assembly line, factory floor, warehouse racks, shipping & receiving).
+ * East half  : production (A site assembly line, environmental / RF test floor, warehouse racks, shipping & receiving).
  * South strip: outdoor loading yard (Attacker spawn). CT spawn: main lobby (north-center).
  */
 
@@ -125,6 +127,8 @@ const PROPS: PropDef[] = [
   P('sofa', 15.5, -36.9, 3, 1, 0.8, { facing: 2 }),
   P('planter', 16.6, -24.8, 0.8, 0.8, 1.4), P('planter', -9.2, -24.8, 0.8, 0.8, 1.4),
   P('logo', 4, -37.9, 7, 0.1, 2.2, { y: 2.2, solid: false, facing: 2 }),
+  P('display', -3, -37.7, 2.4, 0.5, 2.0, { facing: 2 }),
+  P('speedSign', -9.93, -27.6, 0.14, 0.9, 1.55, { y: 1.05, solid: false, facing: 1 }),
   // ---- north hall -------------------------------------------------------------
   P('vending', -10, -21.4, 1.2, 0.8, 1.9, { facing: 2 }),
   P('copier', -21, -21.5, 1.4, 0.8, 1.2, { facing: 2 }),
@@ -139,7 +143,7 @@ const PROPS: PropDef[] = [
   P('cubicle', -24, 4.2, 6, 2.6, 1.4), P('cubicle', -11, 4.2, 6, 2.6, 1.4),
   P('pillar', -17.5, -9, 0.8, 0.8, 3.4),
   // ---- break room -------------------------------------------------------------------
-  P('counter', -57.3, -3, 1.4, 8, 1.0, { facing: 1 }),
+  P('kitchenette', -57.3, -3, 1.4, 8, 1.0, { facing: 1 }),
   P('fridge', -57.3, 3, 1.2, 1, 2.0, { facing: 1 }),
   P('table', -47, -5, 2.4, 1.2, 0.76), P('table', -41, -5, 2.4, 1.2, 0.76),
   P('table', -47, 1, 2.4, 1.2, 0.76), P('table', -41, 1, 2.4, 1.2, 0.76),
@@ -155,25 +159,29 @@ const PROPS: PropDef[] = [
   P('packTable', -27, 16, 3, 1.4, 0.9), P('packTable', -12, 18, 3, 1.4, 0.9),
   P('pillar', -20, 16, 0.8, 0.8, 3.4),
   P('crate', -8, 22, 1.4, 1.4, 1.2),
-  P('cabinet', -36.8, 11.5, 0.8, 3, 1.3, { facing: 1 }),
+  P('cabinet', -37.55, 11.5, 0.8, 3, 1.3, { facing: 1 }),
   // ---- warehouse (A short) ----------------------------------------------------------
   P('rack', 8, -16, 1.2, 8, 4.2), P('rack', 12.5, -16, 1.2, 8, 4.2),
   P('rack', 8, 0, 1.2, 6, 4.2), P('rack', 12.5, 0, 1.2, 6, 4.2),
   P('crate', 16, -9, 1.4, 1.4, 1.4), P('crate', 5.5, -19, 1.2, 1.2, 2.4),
   P('forklift', 16.5, 2, 1.4, 2.6, 2.2, { facing: 0 }),
+  P('fan', 12, -10, 5, 5, 1.1, { y: 7.3, solid: false }),
   // ---- A site: assembly line ----------------------------------------------------------
   P('conveyor', 34, -23, 18, 1.4, 1.0),
-  P('cnc', 28, -34, 4, 3, 2.6, { facing: 2 }), P('cnc', 45, -35, 5, 3, 2.6, { facing: 2 }),
+  P('chamber', 28, -34, 4, 3, 2.6, { facing: 2 }), P('chamber', 45, -35, 5, 3, 2.6, { facing: 2 }),
   P('robotCell', 53, -27, 4, 4, 3.2),
   P('crate', 39, -29, 1.6, 1.6, 1.6), P('crate', 40.6, -29.5, 1.2, 1.2, 1.2),
   P('pallet', 24, -19, 2, 2, 1.2),
   P('pillar', 32, -16, 1, 1, 9), P('pillar', 48, -16, 1, 1, 9),
   P('console', 49, -21, 2, 1, 1.2, { facing: 3 }),
   P('barrels', 56.5, -36.5, 1.2, 1.2, 1.0),
-  // ---- factory floor (A long) ----------------------------------------------------------
-  P('cnc', 26, -9, 4, 3, 2.6), P('cnc', 34, -9, 4, 3, 2.6),
-  P('cnc', 26, 3, 4, 3, 2.6, { facing: 2 }), P('cnc', 34, 3, 4, 3, 2.6, { facing: 2 }),
-  P('press', 45, -6, 5, 4, 4),
+  P('fan', 36, -28, 6, 6, 1.1, { y: 7.3, solid: false }), P('fan', 48, -28, 6, 6, 1.1, { y: 7.3, solid: false }),
+  // ---- test floor (A long): environmental chambers, burn-in racks, RF chamber ------------
+  // Same footprints as the old machine rows; doors and controls now face the walkway.
+  P('chamber', 26, -9, 4, 3, 2.6, { facing: 2 }), P('burnIn', 34, -9, 4, 3, 2.6),
+  P('burnIn', 26, 3, 4, 3, 2.6), P('chamber', 34, 3, 4, 3, 2.6),
+  P('rfChamber', 45, -6, 5, 4, 4),
+  P('fan', 42, -4, 6, 6, 1.1, { y: 7.3, solid: false }), P('fan', 30, 2, 6, 6, 1.1, { y: 7.3, solid: false }),
   P('conveyor', 50, 3, 10, 1.2, 1.0),
   P('forklift', 54, -4, 1.4, 2.6, 2.2, { facing: 2 }),
   P('barrels', 57, -10, 1.6, 1.6, 1.0),
@@ -184,11 +192,14 @@ const PROPS: PropDef[] = [
   P('crate', 41, 18, 2, 2, 2.0), P('pallet', 50, 16, 2, 1.4, 1.2),
   P('packTable', 16, 13.5, 3, 1.2, 0.95), P('packTable', 36, 12.5, 3, 1.2, 0.95),
   P('container', 6.5, 20, 2.4, 6, 2.6),
+  P('fan', 24, 14, 6, 6, 1.1, { y: 7.3, solid: false }), P('fan', 48, 20, 6, 6, 1.1, { y: 7.3, solid: false }),
   // ---- loading yard (T spawn) -------------------------------------------------------------
   P('trailer', 56, 32, 3, 10, 3.8),
   P('boxTruck', 30, 34.3, 9, 2.8, 3.2, { facing: 1 }),
   P('dumpster', -30, 27.6, 2.2, 1.4, 1.4),
-  P('car', -42, 34, 4.4, 2, 1.4, { facing: 1 }),
+  // Parked inside the striped bays: a demo patrol car backed in, a staff car nose-in, a speed trailer.
+  P('patrolCar', -43.5, 34.6, 2, 4.4, 1.4), P('car', -49.5, 34.6, 2, 4.4, 1.4, { facing: 2 }),
+  P('speedTrailer', -37.5, 34.4, 1.6, 3.2, 2.75),
   P('barrier', -4, 29, 3, 0.6, 0.9), P('barrier', 8, 29.5, 3, 0.6, 0.9),
   P('pallet', 20, 28, 1.4, 1.4, 1.2), P('pallet', -16, 30, 1.4, 1.4, 1.0),
   P('barrels', -55, 28, 1.6, 1.6, 1.0),

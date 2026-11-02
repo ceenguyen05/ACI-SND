@@ -45,7 +45,7 @@ export class PlayerController {
   /** Extra sensitivity scale from the session (stun grenades make aiming sluggish). */
   sensMul = 1;
   /** Optional aim-assist hook (set by the session). */
-  assist: ((yaw: number, pitch: number, dt: number, active: boolean) => { sens: number; yaw: number; pitch: number } | null) | null = null;
+  assist: ((yaw: number, pitch: number, dt: number, active: boolean, zoom: number) => { sens: number; yaw: number; pitch: number } | null) | null = null;
 
   constructor(private input: Input, private settings: Settings) {}
 
@@ -68,7 +68,7 @@ export class PlayerController {
     const zs = zoom > 1 ? s.zoomSensitivity / zoom : 1;
     const inp0 = this.input, b = s.bindings;
     const active = dx !== 0 || dy !== 0 || inp0.isDown(b.left) || inp0.isDown(b.right) || inp0.isDown(b.forward) || inp0.isDown(b.back);
-    const as = agent.operating === null && this.assist ? this.assist(this.yaw, this.pitch, dt, active) : null;
+    const as = agent.operating === null && this.assist ? this.assist(this.yaw, this.pitch, dt, active, zoom) : null;
     const k = s.sensitivity * 0.022 * DEG * zs * (as ? as.sens : 1) * this.sensMul;
     this.yaw = wrapAngle(this.yaw - dx * k + (as ? as.yaw : 0));
     this.pitch = clamp(this.pitch - dy * k * (s.invertY ? -1 : 1) + (as ? as.pitch : 0), -89 * DEG, 89 * DEG);

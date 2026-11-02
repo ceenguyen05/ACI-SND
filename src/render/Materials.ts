@@ -124,6 +124,8 @@ export class MaterialLib {
         return m;
       }
       case 'machineBadge': return this.std(key, TEX.machineBadge(), { rough: 0.55, metal: 0.25 });
+      case 'label:speedLimit': return this.std(key, TEX.speedLimit(), { rough: 0.45 });
+      case 'label:rf': return this.std(key, TEX.rfPlacard(), { rough: 0.5 });
       case 'hazard': return this.std(key, TEX.hazard(), { rough: 0.6 });
       case 'rubber': return this.std(key, null, { color: '#1c1d1f', rough: 0.95 });
       case 'chrome': return this.std(key, null, { color: '#d8dde2', rough: 0.15, metal: 1 });
