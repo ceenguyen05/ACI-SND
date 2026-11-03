@@ -229,7 +229,11 @@ main.ts → App (state machine: Title → MainMenu → Match → back)
 
 ## 8. Future work (post v1)
 
-Online multiplayer (authoritative WebSocket server reusing the `src/sim` simulation),
-more maps, destructible soft walls, more killstreaks (care package, sentry), inspect
-animations, demo replay, controller support (aim assist is already in place), and a
-dedicated-server build.
+Shipped since v1: online multiplayer on an authoritative WebSocket server that reuses the
+`src/sim` simulation (see [MULTIPLAYER.md](MULTIPLAYER.md)), with XP and Ranked
+([PROGRESSION.md](PROGRESSION.md)).
+
+Next: server-side visibility culling for Ranked integrity, rejoining a running online match,
+lag compensation, more maps, destructible soft walls, more killstreaks (care package,
+sentry), inspect animations, demo replay and controller support (aim assist is already in
+place).

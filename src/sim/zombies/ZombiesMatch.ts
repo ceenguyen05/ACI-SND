@@ -40,6 +40,9 @@ export interface ZombiesConfig {
   /** Debug / tests: begin on this wave with this many points. */
   startWave?: number;
   startPoints?: number;
+  networkRoster?: { id: number; name: string; isBot: boolean; look: Record<Team, AgentLook> }[];
+  localPlayerId?: number;
+  poolIds?: number[];
 }
 
 export interface Placed { x: number; z: number; yaw: number }
@@ -220,9 +223,11 @@ export class ZombiesMatch extends Match {
     const ctLooks = OUTFITS.filter((o) => o.team === 'CT');
     const n = Math.max(1, Math.min(5, zc.players));
     for (let i = 0; i < n; i++) {
-      const isPlayer = i === 0 && !zc.spectate;
-      const look: Record<Team, AgentLook> = isPlayer ? zc.playerLook : { T: { ...OUTFITS[0].look }, CT: { ...this.rng.pick(ctLooks).look } };
-      const a = new Agent(isPlayer ? (zc.playerName || 'Player') : names[i % names.length], 'CT', !isPlayer, look);
+      const member = zc.networkRoster?.[i];
+      const isPlayer = member ? member.id === zc.localPlayerId : i === 0 && !zc.spectate;
+      const isBot = member ? member.isBot : !isPlayer;
+      const look: Record<Team, AgentLook> = member?.look ?? (isPlayer ? zc.playerLook : { T: { ...OUTFITS[0].look }, CT: { ...this.rng.pick(ctLooks).look } });
+      const a = new Agent(member?.name ?? (isPlayer ? (zc.playerName || 'Player') : names[i % names.length]), 'CT', isBot, look, member?.id);
       a.money = this.rules.startMoney;
       a.zp = {
         perks: [], downed: false, downedAt: 0, bleedUntil: 0, selfReviveAt: 0, revive: null, dead: false, selfRevives: SOLO_SELF_REVIVES, reviveKit: false,
@@ -231,7 +236,7 @@ export class ZombiesMatch extends Match {
       this.humans.push(a);
       this.agents.push(a);
       if (isPlayer) this.player = a;
-      else this.allies.set(a.id, new AllyBot(a, this, diff.allies));
+      else if (isBot) this.allies.set(a.id, new AllyBot(a, this, diff.allies));
     }
     this.humans.forEach((a, i) => this.spawnHuman(a, this.layout.playerSpawns[i % this.layout.playerSpawns.length]));
     // solo players get one free self-revive to start with (casual-friendly, Cold War style)
@@ -239,7 +244,7 @@ export class ZombiesMatch extends Match {
 
     // ---- zombie pool
     for (let i = 0; i < POOL; i++) {
-      const z = new Agent('Zombie', 'T', true, { T: ZOMBIE_LOOK, CT: ZOMBIE_LOOK });
+      const z = new Agent('Zombie', 'T', true, { T: ZOMBIE_LOOK, CT: ZOMBIE_LOOK }, zc.poolIds?.[i]);
       z.alive = false; z.deathTime = -1e9;
       z.secondary = null; z.primary = null; z.active = 'melee';
       z.zombie = this.blankZombie();
@@ -362,6 +367,14 @@ export class ZombiesMatch extends Match {
   }
 
   // ======================================================================== main step
+  override replaceWithBot(id: number) {
+    const a = this.humans.find(h => h.id === id);
+    if (!a || this.allies.has(id)) return;
+    a.isBot = true; a.name = `BOT ${a.name}`; this.humanCommands.delete(id);
+    if (a.operating !== null) this.gadgets.operate(a, null);
+    const bot = new AllyBot(a, this, this.diff.allies); this.allies.set(id, bot); bot.reset();
+  }
+
   override step(dt: number) {
     this.time += dt;
     this.tick++;
@@ -936,7 +949,7 @@ export class ZombiesMatch extends Match {
   private updateHuman(h: Agent, dt: number) {
     if (!h.alive) return;
     const zp = h.zp!, now = this.time;
-    let cmd: AgentCommand = h === this.player ? this.playerCmd : this.allies.get(h.id)?.think(dt) ?? emptyCommand();
+    let cmd: AgentCommand = this.allies.get(h.id)?.think(dt) ?? this.humanCommands.get(h.id) ?? (h === this.player ? this.playerCmd : emptyCommand());
     cmd = { ...cmd, drop: false, killstreak: false, cams: false };
     if (zp.downed) {
       Object.assign(cmd, { prone: true, crouch: true, jump: false, slide: false, walk: false, quickMelee: false, stimSelf: false, selectGrenade: null, selectGadget: null,

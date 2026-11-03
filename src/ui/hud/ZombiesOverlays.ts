@@ -91,7 +91,7 @@ export class ZombiesScoreboard {
 /** Game over / successful exfil. */
 export class ZombiesEndScreen {
   readonly el: HTMLDivElement;
-  constructor(m: ZombiesMatch, best: number, newBest: boolean, onAgain: () => void, onMenu: () => void) {
+  constructor(m: ZombiesMatch, best: number, newBest: boolean, onAgain: () => void, onMenu: () => void, online = false) {
     const me = m.player;
     const won = m.won;
     const title = won ? 'EXFIL SUCCESSFUL' : 'GAME OVER';
@@ -108,7 +108,7 @@ export class ZombiesEndScreen {
           rows.map((a) => h('tr', { class: a === me ? 'me' : '' }, h('td', null, a.name), h('td', null, String(a.zp!.stats.kills)), h('td', null, String(a.zp!.stats.headshots)),
             h('td', null, String(a.zp!.stats.downs)), h('td', null, String(a.zp!.stats.revives)), h('td', null, a.zp!.stats.earned.toLocaleString('en-US'))))),
         h('div', { class: 'row', style: 'justify-content:center;margin-top:24px;gap:12px' },
-          h('button', { class: 'btn primary', onclick: () => { sfx.ui_click(); onAgain(); } }, 'Play again'),
+          h('button', { class: 'btn primary', onclick: () => { sfx.ui_click(); onAgain(); } }, online ? 'Find another match' : 'Play again'),
           h('button', { class: 'btn', onclick: () => { sfx.ui_click(); onMenu(); } }, 'Main menu'))));
   }
 }

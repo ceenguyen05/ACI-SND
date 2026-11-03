@@ -10,6 +10,7 @@ import { OUTFITS, type AgentLook } from '../../config/cosmetics';
 import type { BotDifficulty } from '../../config/difficulty';
 import { Agent, emptyCommand, makeWeapon, refitWeapon, type AgentCommand, type HitGroup, type WeaponInstance } from '../entities/Agent';
 import { stepMotor } from '../physics/CharacterMotor';
+import { moveAgent } from '../physics/AgentMovement';
 import { World } from '../world/World';
 import type { MapDef } from '../world/MapTypes';
 import type { SimEvents, RoundEndReason } from '../events';
@@ -42,6 +43,9 @@ export interface MatchConfig {
   worldExtras?: Omit<import('../physics/CollisionWorld').Box, 'id'>[];
   /** 'zombies' skips the Search & Destroy roster and round setup (ZombiesMatch builds its own). */
   mode?: 'snd' | 'zombies';
+  /** Explicit roster for an authoritative online match or its display replica. */
+  roster?: { id: number; name: string; team: Team; isBot: boolean; look: Record<Team, AgentLook> }[];
+  localPlayerId?: number;
 }
 
 const BOT_NAMES = ['Rivet', 'Torque', 'Gasket', 'Sprocket', 'Ratchet', 'Flux', 'Solder', 'Piston', 'Dowel', 'Ledger',
@@ -81,6 +85,7 @@ export class Match implements SimContext, MatchQuery {
   lastRoundEnd: { winner: Team; reason: RoundEndReason; mvpId: number | null } | null = null;
 
   protected playerCmd: AgentCommand = emptyCommand();
+  protected humanCommands = new Map<number, AgentCommand>();
   private pendingHalftime = false;
   protected losCache = new Map<number, boolean>();
   private nextItemId = 1;
@@ -105,7 +110,15 @@ export class Match implements SimContext, MatchQuery {
       CT: { ...this.rng.pick(OUTFITS.filter((o) => o.team === 'CT')).look },
     });
     let player: Agent | null = null;
-    for (const team of ['T', 'CT'] as Team[]) {
+    if (cfg.roster) {
+      for (const p of cfg.roster) {
+        const a = new Agent(p.name, p.team, p.isBot, p.look, p.id);
+        a.money = this.rules.startMoney;
+        this.agents.push(a);
+        if (p.id === cfg.localPlayerId) player = a;
+        if (p.isBot) this.bots.set(a.id, new BotController(a, this, cfg.difficulty, () => this.coaches[a.team]));
+      }
+    } else for (const team of ['T', 'CT'] as Team[]) {
       for (let i = 0; i < this.rules.teamSize; i++) {
         const isPlayer = cfg.playerTeam === team && i === 0;
         const a = isPlayer ? new Agent(cfg.playerName || 'Player', team, false, cfg.playerLook)
@@ -140,6 +153,26 @@ export class Match implements SimContext, MatchQuery {
     return 0;
   }
   setPlayerCommand(cmd: AgentCommand) { this.playerCmd = cmd; }
+  setHumanCommand(id: number, cmd: AgentCommand) { this.humanCommands.set(id, cmd); }
+  invalidateVisibility() { this.losCache.clear(); }
+  /** Server time limit: end now with the given winner (null = draw), as a normal match end. */
+  forceEnd(winner: Team | null) {
+    if (this.phase === 'matchOver') return;
+    this.winner = winner; this.matchOver = true; this.phase = 'matchOver';
+    this.events.emit('matchEnd', { winner });
+  }
+  /** A disconnected human keeps their slot, inventory and score under bot control. */
+  replaceWithBot(id: number) {
+    const a = this.getAgent(id);
+    if (!a || this.bots.has(id)) return;
+    a.isBot = true;
+    a.name = `BOT ${a.name}`;
+    this.humanCommands.delete(id);
+    if (a.operating !== null) this.gadgets.operate(a, null); // bots never leave a camera/drone feed
+    const bot = new BotController(a, this, this.difficulty, () => this.coaches[a.team]);
+    this.bots.set(id, bot);
+    bot.resetRound();
+  }
   getAgent(id: number | null) { return id === null ? null : this.agents.find((a) => a.id === id) ?? null; }
   setDifficulty(d: BotDifficulty) { this.difficulty = d; for (const b of this.bots.values()) b.setDifficulty(d); }
 
@@ -573,7 +606,7 @@ export class Match implements SimContext, MatchQuery {
       let cmd: AgentCommand;
       const bot = this.bots.get(a.id);
       if (bot) cmd = bot.think(dt);
-      else cmd = this.playerCmd;
+      else cmd = this.humanCommands.get(a.id) ?? (a === this.player ? this.playerCmd : emptyCommand());
       this.applyCommand(a, cmd, dt);
     }
     if (this.phase === 'live' || this.phase === 'planted') { this.coaches.T.update(); this.coaches.CT.update(); }
@@ -625,25 +658,9 @@ export class Match implements SimContext, MatchQuery {
     a.yaw = cmd.yaw;
     a.pitch = clamp(cmd.pitch, -89 * DEG, 89 * DEG);
 
-    // lean / tilt-aim, limited by nearby walls
-    const target = clamp(cmd.lean, -1, 1) * (1 - a.motor.prone) * (1 - a.motor.slidePose);
-    let limit = 1;
-    if (target !== 0) {
-      const eye = new Vector3(a.pos.x, a.pos.y + a.eyeHeight, a.pos.z);
-      const side = new Vector3(Math.cos(a.yaw) * Math.sign(target), 0, -Math.sin(a.yaw) * Math.sign(target));
-      const hit = this.world.collision.raycast(eye, side, MOVE.leanOffset + 0.3);
-      if (hit) limit = clamp((hit.t - 0.3) / MOVE.leanOffset, 0, 1);
-    }
-    a.lean = approach(a.lean, target * limit, dt * MOVE.leanSpeed);
-    if (Math.abs(a.lean) > Math.abs(target * limit) + 0.01) a.lean = target * limit;
-
-    const frozen = this.phase === 'freeze' || a.isDefusing || a.isPlanting;
     const wasGround = a.motor.onGround;
     const wasSliding = a.sliding, wasProne = a.prone;
-    const res = stepMotor(this.world.collision, a.motor, {
-      forward: cmd.forward, right: cmd.right, jump: cmd.jump, crouch: cmd.crouch, prone: cmd.prone, slide: cmd.slide, walk: cmd.walk,
-      yaw: a.yaw, maxSpeed: a.maxSpeed() * (Math.abs(a.lean) > 0.3 ? 0.85 : 1) * this.gadgets.wireSlowAt(a.pos) * (1 - 0.5 * a.stunAt(this.time)), frozen,
-    }, dt);
+    const res = moveAgent(this, a, cmd, dt);
     if (wasProne !== a.prone) this.events.emit('prone', { agentId: a.id, down: a.prone, pos: a.pos.clone() });
     if (!wasSliding && a.sliding) {
       this.events.emit('slide', { agentId: a.id, pos: a.pos.clone() });

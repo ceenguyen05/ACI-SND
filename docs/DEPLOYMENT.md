@@ -1,9 +1,21 @@
 # Deployment & CI
 
+For **Vercel Free frontend + Render Free backend + Aiven Free MySQL**, follow the step-by-step
+[online deployment guide](ONLINE_DEPLOYMENT.md). Set the GitHub Actions repository
+variable `DEPLOY_GITHUB_PAGES=false` if you do not want Pages publishing; all CI checks
+still run on `main`. Without that variable, the Pages flow below remains enabled.
+
 The game is a static site (Vite build of TypeScript + Three.js). GitHub Actions checks every
 change and publishes `main` to **GitHub Pages**:
 
 **https://ceenguyen05.github.io/ACI-SND/**
+
+The frontend also works with the existing GitHub-to-Vercel deployment. Online Search &
+Destroy and Zombies use a persistent Node game server; configure `VITE_MULTIPLAYER_URL` in Vercel
+and host that process separately. See [multiplayer hosting](MULTIPLAYER.md#keep-the-frontend-on-vercel)
+for the exact setup and current Vercel WebSocket constraints. Use MySQL for free-hosted
+XP, ranks and profiles, or a persistent `DATA_DIR` volume for file storage on another host; [progression documentation](PROGRESSION.md)
+describes the account/storage boundaries.
 
 ## How it flows
 
@@ -33,15 +45,17 @@ push to main (or "Run workflow") ──► Deploy to GitHub Pages
 
 ### What the checks cover
 
-* **Typecheck:** strict TypeScript over `src/` and `tests/`.
+* **Typecheck:** strict TypeScript over `src/`, `server/` and `tests/`.
 * **Unit and simulation tests:**
   * Movement and physics (prone, slide, mantle, crouch-jump), ballistics, wallbangs,
     economy and the Gunsmith.
   * Gadgets, killstreaks, bots, input bindings and aim assist.
   * Complete bot-vs-bot matches.
+  * Public matchmaking, private codes, queue deadlines, bot filling, ownership,
+    input validation, snapshot/prediction and real WebSocket integration.
   * A guard that fails if the map changed without re-baking the lightmaps.
 * **Production build:** the exact files that will be published.
-* **Boot check** (`scripts/boot-check.mjs`):
+* **Boot check** (`scripts/checks/boot-check.mjs`):
   * Serves the build from **`/ACI-SND/`**, the same sub-path GitHub Pages uses, so broken
     asset paths show up as 404s.
   * Loads it in headless Chromium, goes through the menu and starts a Search & Destroy match,
@@ -53,6 +67,10 @@ push to main (or "Run workflow") ──► Deploy to GitHub Pages
     WebGL runs on the SwiftShader software renderer at about 1 FPS.
 
 ### Checks that need a real GPU (run locally)
+
+CI's unit suite includes actual WebSocket server integration tests. The full interactive
+multiplayer browser check (`npm run test:online:browser`) runs locally with a GPU, like
+the existing smoke/key checks; its evidence is saved in `screenshots/online/`.
 
 GitHub's Linux runners have no GPU, so these interactive checks run on your machine before a
 bigger release:
@@ -133,7 +151,7 @@ The build uses relative asset paths (`base: './'` in `vite.config.ts`), so it wo
 ├─ dependabot.yml          # weekly npm / monthly Actions updates
 └─ CODEOWNERS
 scripts/
-├─ boot-check.mjs          # deploy boot check (CI)
+├─ checks/boot-check.mjs   # deploy boot check (CI)
 └─ lib/browser.mjs         # shared Chromium flags: GPU locally, SwiftShader on CI
 .nvmrc                     # Node version used by CI (22)
 ```

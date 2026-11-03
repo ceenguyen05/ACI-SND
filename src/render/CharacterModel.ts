@@ -1,4 +1,4 @@
-import { CapsuleGeometry, CircleGeometry, Color, CylinderGeometry, Group, LatheGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, Vector2, Vector3, type Material, type Object3D } from 'three';
+import { CapsuleGeometry, CircleGeometry, Color, Group, LatheGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, Vector2, Vector3, type Material, type Object3D } from 'three';
 import { batchModel, bevelBox, releaseModel } from './Geometry';
 import { contactShadow, surfaceDetail, TEX } from './Textures';
 import { garment, legPose } from './HumanoidGeometry';
@@ -405,10 +405,4 @@ export class CharacterModel {
     for (const material of this.own.values()) material.dispose();
     this.own.clear();
   }
-}
-
-/** Ring shown under teammates (team color). */
-export function teamRing(color: string): Mesh {
-  const ring = new Mesh(new CylinderGeometry(0.5, 0.5, 0.01, 20, 1, true), new MeshBasicMaterial({ color, transparent: true, opacity: 0.0 }));
-  return ring;
 }

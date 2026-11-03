@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Free backend + external Aiven Free MySQL. No paid disk is provisioned.
+# Follow docs/ONLINE_DEPLOYMENT.md before creating the Blueprint.
+services:
+  - type: web
+    name: aci-snd-online
+    runtime: node
+    plan: free
+    region: ohio
+    branch: main
+    numInstances: 1
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ACCOUNT_STORAGE
+        value: mysql
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_SSL_CA
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Render's proxy can share a network peer IP across many actual players.
+      # The server still limits total connections to 128 and rooms to 16.
+      - key: MAX_CONNECTIONS_PER_IP
+        value: "128"

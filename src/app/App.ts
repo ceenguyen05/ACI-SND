@@ -108,6 +108,7 @@ export class App {
     this.mode = 'menu';
     this.menu = new MainMenu(this.profile, {
       start: (mode, spectate) => this.startGame({ mode, spectate }),
+      online: (client, match) => this.startGame({ online: { client, match } }),
       profileChanged: () => { saveProfile(this.profile); this.refreshShowcase(); },
       settingsChanged: (s) => this.applySettings(s),
       pageChanged: (page, ctx) => { this.menuPage = page; this.showTeam = ctx.team; this.showWeaponId = ctx.weapon; this.showMode = ctx.mode; this.refreshShowcase(); },

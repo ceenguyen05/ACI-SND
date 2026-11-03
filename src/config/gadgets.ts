@@ -53,8 +53,6 @@ export const GADGETS: Record<GadgetId, GadgetDef> = {
 };
 
 /** Barricade-class devices sit in doorways and are pried off with a crowbar. */
-export const BARRICADES: GadgetId[] = ['barricade', 'steelBarricade'];
-
 export const GADGET_ORDER: GadgetId[] = ['stim', 'heartbeat', 'drone', 'stickyCam', 'flockCam', 'c4', 'mine', 'emp', 'barricade', 'steelBarricade', 'wire', 'shield', 'ammoBox'];
 /** A fresh, empty gadget inventory. */
 export const emptyGadgets = (): Record<GadgetId, number> =>

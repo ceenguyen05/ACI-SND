@@ -3,7 +3,7 @@ import { DIFFICULTY, type BotDifficulty, type DifficultyDef } from '../../config
 import type { UtilityId } from '../../config/utilities';
 import type { GadgetId } from '../../config/gadgets';
 import type { Device } from '../gadget/GadgetManager';
-import { DEG, angleDiff, clamp, dirFromAngles, wrapAngle, yawTo } from '../../core/math';
+import { DEG, angleDiff, clamp, wrapAngle, yawTo } from '../../core/math';
 import { emptyCommand, type Agent, type AgentCommand } from '../entities/Agent';
 import type { MatchQuery } from '../mode/types';
 import type { NoiseKind } from '../SimContext';
@@ -857,6 +857,3 @@ export class BotController {
     if (t.stage === 3) this.tasks.shift();
   }
 }
-
-/** Utility: a unit forward vector for a bot's view (debug/tests). */
-export function botForward(b: { agent: Agent }) { return dirFromAngles(b.agent.yaw, b.agent.pitch); }

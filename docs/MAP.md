@@ -119,7 +119,7 @@ Positions are listed in `cctv` in `src/sim/maps/aciHq.ts`.
 | Defenders → A | Lobby → A door | ≈3 s |
 | Defenders → B | Lobby → Conference 2 → Conference 1 → B | ≈7 s |
 
-Automated checks in `tests/map.test.ts` cover:
+Automated checks in `tests/game/map.test.ts` cover:
 * every spawn, plant spot and AI waypoint is walkable;
 * both spawns can reach both sites;
 * every bot route is traversable;

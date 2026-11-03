@@ -68,4 +68,3 @@ export function refreshWeapon(w: WeaponInstance, perks: readonly PerkId[]) {
 }
 
 /** The forge-upgraded name, for UI previews. */
-export const forgedName = (id: WeaponId) => FORGED_NAMES[id] ?? `${WEAPONS[id].name} MK-II`;

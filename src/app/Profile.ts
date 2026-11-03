@@ -4,6 +4,7 @@ import type { BotDifficulty } from '../config/difficulty';
 import type { MatchLength, Team } from '../config/rules';
 import type { WeaponId } from '../config/weapons';
 import type { ZDifficulty, ZLength } from '../config/zombies';
+import { newCareer, restoreCareer, type Career } from '../progression/career';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type AimAssist = 'off' | 'low' | 'medium' | 'high';
@@ -71,6 +72,8 @@ export interface Profile {
   zombies: ZombiePrefs;
   zstats: ZombieStats;
   settings: Settings;
+  career: Career;
+  onlineCareer: Career | null;
 }
 
 const KEY = 'aci-snd-profile-v1';
@@ -95,6 +98,7 @@ export function defaultProfile(): Profile {
     zombies: { players: 3, difficulty: 'normal', length: 'short' },
     zstats: { games: 0, kills: 0, headshots: 0, downs: 0, revives: 0, exfils: 0, best: {} },
     settings: structuredClone(DEFAULT_SETTINGS),
+    career: newCareer(), onlineCareer: null,
   };
 }
 
@@ -107,6 +111,7 @@ export function loadProfile(): Profile {
     const p = JSON.parse(raw) as Partial<Profile>;
     return {
       ...base, ...p,
+      career: restoreCareer(p.career), onlineCareer: p.onlineCareer ? restoreCareer(p.onlineCareer) : null,
       looks: { T: { ...base.looks.T, ...p.looks?.T }, CT: { ...base.looks.CT, ...p.looks?.CT } },
       stats: { ...base.stats, ...p.stats },
       match: { ...base.match, ...p.match },

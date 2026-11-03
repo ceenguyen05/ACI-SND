@@ -1,8 +1,6 @@
 export type Team = 'T' | 'CT';
 export const otherTeam = (t: Team): Team => (t === 'T' ? 'CT' : 'T');
 export const TEAM_NAMES: Record<Team, string> = { T: 'Attackers', CT: 'Defenders' };
-export const TEAM_SHORT: Record<Team, string> = { T: 'ATK', CT: 'DEF' };
-
 export type MatchLength = 'quick' | 'short' | 'standard';
 export const MATCH_LENGTHS: Record<MatchLength, { label: string; roundsToWin: number; halfLength: number }> = {
   quick: { label: 'Quick (first to 5)', roundsToWin: 5, halfLength: 4 },

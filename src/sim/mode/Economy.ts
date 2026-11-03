@@ -77,6 +77,7 @@ export function purchaseBlocker(item: BuyItem, b: Buyer): string | null {
   switch (item.kind) {
     case 'weapon': {
       const def = WEAPONS[item.id];
+      if (def.zombiesOnly) return 'Zombies only';
       if (!availableTo(def, b.team) || def.slot === 'melee') return 'Not available for your team';
       const cur = def.slot === 'primary' ? b.primary : b.secondary;
       if (cur && cur.def.id === item.id) return 'Already owned';

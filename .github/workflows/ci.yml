@@ -49,6 +49,8 @@ jobs:
         run: npm test
 
       - name: Production build
+        env:
+          VITE_MULTIPLAYER_URL: ${{ vars.VITE_MULTIPLAYER_URL }}
         run: |
           npx vite build
           # build stamp, served at <site>/version.json

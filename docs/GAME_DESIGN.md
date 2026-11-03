@@ -148,7 +148,7 @@ line when aiming, and the front post's tip is exactly on it:
 * The Breacher has low bead sights, so a fitted dot sits clear above them.
 * The Thumper has a raised ladder.
 
-`tests/aiming.test.ts` casts rays down every gun's sight line to keep it clear.
+`tests/game/aiming.test.ts` casts rays down every gun's sight line to keep it clear.
 
 ## Buying shortcuts, markers and tips
 
@@ -543,7 +543,7 @@ Research informing these choices (reviewed November 2, 2026):
   principles inform our persistent drift, delayed motion estimates and difficulty-specific pauses.
 
 The exact values above are local design choices, validated by the firing-lane tests in
-`tests/hit-registration.test.ts` and `tests/bot-accuracy.test.ts`, plus browser gunplay checks.
+`tests/game/hit-registration.test.ts` and `tests/game/bot-accuracy.test.ts`, plus browser gunplay checks.
 The fixed 20 m moving-target test (six seeds, eight seconds each, stationary Sentinel bot
 against a player strafing through the real movement system) measured hit rates of 15% /
 17% / 27% / 35% from Easy to Expert. These isolate aiming, not match win rates.

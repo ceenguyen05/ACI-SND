@@ -683,3 +683,55 @@ input, select { font-family: var(--font); }
 .z-end-wave b { font-size: 100px; line-height: 1; color: #c41a12; font-family: Georgia, serif; font-style: italic; text-shadow: 0 0 34px rgba(200,20,10,.55); animation: waveBump 1.6s ease-out; }
 .z-end-wave span { font-size: 12px; letter-spacing: .4em; color: var(--muted); }
 .z-end .sb-table td, .z-end .sb-table th { text-align: center; }
+/* Online rooms and public matchmaking */
+.online-screen { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; background:linear-gradient(110deg,rgba(5,11,18,.94),rgba(8,17,25,.72)); pointer-events:auto; }
+.online-panel { width:min(840px,100%); max-height:94vh; overflow:auto; padding:28px; }
+.online-heading { display:flex; align-items:center; gap:24px; border-bottom:1px solid #34414c; padding-bottom:16px; margin-bottom:18px; }
+.online-heading h1 { margin:5px 0 0; font-size:32px; }
+.online-options,.online-actions,.online-join,.online-teams,.online-room-head { display:flex; gap:14px; }
+.online-options { margin:22px 0; }
+.online-options label,.online-join label,.online-server-settings label { display:flex; flex-direction:column; gap:8px; }
+.online-options label { flex:1; }
+.online-options select { width:100%; color:inherit; background:#15212c; }
+.online-actions { flex-wrap:wrap; margin:18px 0; }
+.online-actions .btn { flex:1; min-width:160px; }
+.online-join { align-items:flex-end; border-top:1px solid #34414c; padding-top:20px; margin-top:20px; }
+.room-code-input { font-size:22px; letter-spacing:.2em; width:180px; }
+.online-note { font-size:13px; line-height:1.6; margin-top:20px; }
+.online-server-settings { border-top:1px solid #34414c; padding-top:14px; font-size:12px; }
+.online-server-settings summary { cursor:pointer; margin-bottom:12px; }
+.online-server { width:100%; font-size:13px; }
+.online-status { min-height:24px; color:#f3bc63; font-size:14px; margin-bottom:0; }
+.online-room-head { align-items:center; justify-content:space-between; }
+.online-code { display:inline-block; letter-spacing:.18em; font-size:28px; color:#f3bc63; margin-left:8px; }
+.online-team { flex:1; padding:16px; background:rgba(15,24,35,.85); border:1px solid #394858; border-top:3px solid #da9b49; }
+.online-team.CT { border-top-color:#75b9ea; }
+.online-team h3 { margin:0 0 12px; }
+.online-slot { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid #2e3b49; }
+.online-slot small { color:#9ab7cc; }
+.online-slot.empty { color:#8192a0; }
+.online-countdown { margin-top:22px; font-size:20px; }
+.online-countdown b { color:#f3bc63; font-variant-numeric:tabular-nums; }
+.online-screen.connecting .online-content { pointer-events:none; opacity:.55; }
+.net-status { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); color:#8ee7bd; background:#0d1b27cc; padding:6px 10px; font-size:12px; pointer-events:none; }
+.net-status.stale { color:#ffc16e; }
+.online-disconnected { padding:28px; max-width:520px; }
+@media(max-width:620px) { .online-screen { padding:8px; } .online-panel { padding:16px; } .online-teams { flex-direction:column; } .online-heading h1 { font-size:24px; } .online-options { flex-wrap:wrap; } }
+.xp-status { position:absolute; left:50%; bottom:51px; transform:translateX(-50%); background:#111b27c9; color:#ffce7b; padding:5px 11px; font-size:12px; pointer-events:none; max-width:62vw; text-align:center; }
+.career-page { max-width:1100px; }
+.career-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:20px; }
+.career-card { padding:22px; }
+.career-level { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:12px; margin:20px 0 12px; }
+.career-level strong { font-size:28px; color:#ffcc7c; }
+.career-level span { font-size:13px; color:#9dabb8; }
+.career-progress { width:100%; height:12px; accent-color:#efa935; }
+.career-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:24px 0; }
+.career-stats div { display:flex; flex-direction:column; gap:4px; }
+.career-stats b { font-size:23px; }
+.career-stats span { font-size:12px; color:#9dabb8; }
+.career-ranked { padding:12px 0; border-top:1px solid #34414c; }
+.career-daily { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid #34414c; font-size:13px; }
+.career-ladder { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0; }
+.rank-badge { border:1px solid currentColor; padding:8px 12px; font-size:12px; color:#c5cbd0; }
+.rank-1 { color:#d29870; }.rank-2 { color:#d7e0ee; }.rank-3 { color:#f4cb72; }.rank-4 { color:#7ed6e8; }.rank-5 { color:#69d5a1; }.rank-6 { color:#a9b8ff; }.rank-7 { color:#f4a4de; }
+@media(max-width:800px) { .career-grid { grid-template-columns:1fr; } }

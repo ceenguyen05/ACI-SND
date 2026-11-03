@@ -35,7 +35,7 @@ export class ModeSelect {
     this.el = h('div', { class: 'ms' },
       h('div', { class: 'ms-head' },
         h('button', { class: 'mm-back', onclick: () => { sfx.ui_click(); this.back(); }, onmouseenter: () => sfx.ui_hover() }, h('i', null, '◀'), 'Back'),
-        h('div', null, h('div', { class: 'ms-kicker' }, 'Play now'), h('h1', { class: 'page-title' }, 'Select a mode'))),
+        h('div', null, h('div', { class: 'ms-kicker' }, 'Offline · Play with bots'), h('h1', { class: 'page-title' }, 'Select a mode'))),
       h('div', { class: 'ms-stage' }, h('div', { class: 'ms-cards' }, this.cards.snd, this.cards.zombies), this.setup),
       h('div', { class: 'ms-hint' }, '← → choose · Enter select · Esc back'));
     this.setHover(preselect ?? 'snd', false);

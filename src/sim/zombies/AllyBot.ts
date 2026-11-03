@@ -456,9 +456,11 @@ export class AllyBot {
       push({ kind: 'box', x: f.x, z: f.z, ref: 0, until: now + 25 }, 3);
     }
     // an all-bot squad ("Watch bots") explores on its own: power first, then new areas
-    // with a human in the squad, the power is theirs to find first — bots help out from wave 6
-    if (!m.power && (!m.player || m.wave >= 6)) { const f = this.front(m.powerPos, 1.0); push({ kind: 'power', x: f.x, z: f.z, ref: 0, until: now + 40 }, 9); }
-    if (!m.player) {
+    // with a human in the squad, the power is theirs to find first — bots help out from wave 6.
+    // Online servers have no local `player`, so count humans rather than checking it.
+    const allBots = !m.humans.some((h) => !h.isBot);
+    if (!m.power && (allBots || m.wave >= 6)) { const f = this.front(m.powerPos, 1.0); push({ kind: 'power', x: f.x, z: f.z, ref: 0, until: now + 40 }, 9); }
+    if (allBots) {
       if (m.wave >= 2) m.gates.forEach((gt, i) => {
         if (gt.open || money < gt.def.price + 400 || !(m.zoneOpen[gt.def.zones[0]] || m.zoneOpen[gt.def.zones[1]])) return;
         const side = m.zoneOpen[gt.def.zones[0]] ? gt.def.zones[0] : gt.def.zones[1];

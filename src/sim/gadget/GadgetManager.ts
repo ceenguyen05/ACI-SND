@@ -299,8 +299,8 @@ export class GadgetManager {
   cycle(a: Agent, dir: number) {
     const feeds = this.feedsFor(a);
     if (!feeds.length) { this.operate(a, null); return; }
-    const i = feeds.findIndex((d) => d.id === a.operating);
-    const next = feeds[((i < 0 ? 0 : i + dir) % feeds.length + feeds.length) % feeds.length];
+    const i = feeds.findIndex((d) => d.id === a.operating), step = Math.sign(dir);
+    const next = feeds[((i < 0 ? 0 : i + step) % feeds.length + feeds.length) % feeds.length];
     this.operate(a, next.id);
   }
 

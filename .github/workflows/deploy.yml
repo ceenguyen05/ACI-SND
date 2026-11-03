@@ -2,6 +2,8 @@
 # publishes the exact build CI tested to GitHub Pages.
 #
 # One-time setup: repository Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# For Vercel-only hosting, set the Actions variable DEPLOY_GITHUB_PAGES=false.
+# CI still runs on main and can gate Render's automatic deploys.
 name: Deploy to GitHub Pages
 
 on:
@@ -27,6 +29,7 @@ jobs:
   deploy:
     name: Publish to GitHub Pages
     needs: ci
+    if: vars.DEPLOY_GITHUB_PAGES != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

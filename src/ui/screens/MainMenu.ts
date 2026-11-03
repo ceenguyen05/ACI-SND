@@ -15,14 +15,22 @@ import { optRow, seg, swatches } from '../components';
 import { SettingsPanel } from './SettingsPanel';
 import { ModeSelect } from './ModeSelect';
 import { zombieArt } from './art';
+import { OnlineMenu } from './OnlineMenu';
+import type { OnlineClient } from '../../net/OnlineClient';
+import type { MatchStart } from '../../net/protocol';
+import { careerScreen } from './CareerScreen';
+import { levelAt, rankLabel } from '../../progression/career';
+import { version } from '../../../package.json';
 
-export type MenuPage = 'home' | 'play' | 'agents' | 'loadout' | 'settings' | 'about' | 'help';
+export type MenuPage = 'home' | 'play' | 'online' | 'career' | 'agents' | 'loadout' | 'settings' | 'about' | 'help';
 
 export const GAME_TITLE = 'ACI: Series 1';
-export const GAME_VERSION = 'v1.1';
+/** package.json is the single source of the release version shown in the game. */
+export const GAME_VERSION = `v${version}`;
 
 export interface MenuCallbacks {
   start(mode: GameMode, spectate: boolean): void;
+  online(client: OnlineClient, match: MatchStart): void;
   profileChanged(): void;
   settingsChanged(s: Settings): void;
   /** Page / showcase context changed (3D showcase in the lobby behind the menu). */
@@ -44,7 +52,7 @@ export class TitleScreen {
       logo('title-logo'),
       h('div', { class: 'title-modes' }, h('span', null, 'Search & Destroy'), h('i'), h('span', null, 'Zombies')),
       h('div', { class: 'press-any' }, 'Click or press any key'),
-      h('div', { class: 'title-foot' }, 'ACI HQ · Version 1.5.5'));
+      h('div', { class: 'title-foot' }, `ACI HQ · Version ${version}`));
     window.addEventListener('keydown', go);
   }
 }
@@ -58,6 +66,7 @@ export class MainMenu {
   private loadoutWeapon: WeaponId = 'ravager';
   private settingsPanel: SettingsPanel;
   private modes: ModeSelect | null = null;
+  private online: OnlineMenu | null = null;
   private items: HTMLButtonElement[] = [];
   private focus = 0;
   private keyHandler = (e: KeyboardEvent) => this.onKey(e);
@@ -75,7 +84,7 @@ export class MainMenu {
     this.show('home');
   }
 
-  dispose() { window.removeEventListener('keydown', this.keyHandler); this.modes?.dispose(); }
+  dispose() { window.removeEventListener('keydown', this.keyHandler); this.modes?.dispose(); this.online?.dispose(); }
 
   private onKey(e: KeyboardEvent) {
     if (this.input.captureNext || (e.target as HTMLElement)?.tagName === 'INPUT') return;
@@ -94,20 +103,28 @@ export class MainMenu {
   }
 
   show(p: MenuPage) {
+    this.online?.dispose(); this.online?.el.remove(); this.online = null;
     this.current = p;
     if (p === 'play') { this.openModes(); return; }
+    if (p === 'online') {
+      this.home.classList.add('hidden'); this.page.classList.add('hidden');
+      this.online = new OnlineMenu(this.profile, () => this.show('home'), (client, match) => this.cb.online(client, match));
+      this.el.append(this.online.el);
+      this.cb.pageChanged('online', { team: this.agentTeam, weapon: this.loadoutWeapon, mode: null });
+      return;
+    }
     this.home.classList.toggle('hidden', p !== 'home');
     this.page.classList.toggle('hidden', p === 'home');
     if (p === 'home') this.renderHome();
     else {
       this.page.innerHTML = '';
-      const titles: Record<string, string> = { agents: 'Operators', loadout: 'Loadout', settings: 'Settings', about: 'About', help: 'How to play' };
+      const titles: Record<string, string> = { career: 'Career & Rank', agents: 'Operators', loadout: 'Loadout', settings: 'Settings', about: 'About', help: 'How to play' };
       const body = h('div', { class: 'mm-page-body' });
       this.page.append(h('div', { class: 'mm-page-head' },
         h('button', { class: 'mm-back', onclick: () => { sfx.ui_click(); this.show('home'); }, onmouseenter: () => sfx.ui_hover() }, h('i', null, '◀'), 'Back'),
         h('h1', { class: 'page-title' }, titles[p] ?? p)), body);
       this.page.classList.remove('enter'); void this.page.offsetWidth; this.page.classList.add('enter');
-      ({ agents: () => this.renderAgents(body), loadout: () => this.renderLoadout(body), settings: () => this.renderSettings(body), about: () => this.renderAbout(body), help: () => this.renderHelp(body) } as Record<string, () => void>)[p]?.();
+      ({ career: () => body.append(careerScreen(this.profile)), agents: () => this.renderAgents(body), loadout: () => this.renderLoadout(body), settings: () => this.renderSettings(body), about: () => this.renderAbout(body), help: () => this.renderHelp(body) } as Record<string, () => void>)[p]?.();
     }
     this.cb.pageChanged(p, { team: this.agentTeam, weapon: this.loadoutWeapon, mode: null });
   }
@@ -136,9 +153,11 @@ export class MainMenu {
         logo('mm-logo'),
         h('div', { class: 'mm-tag' }, 'Tactical shooter · ACI HQ'),
         h('nav', { class: 'mm-nav' },
-          item('01', 'Play Now', 'Search & Destroy or Zombies', 'play', true),
-          item('02', 'Settings', 'Controls, video, audio, gameplay', 'settings'),
-          item('03', 'About', 'Game modes, credits and version', 'about')),
+          item('01', 'Play Now', 'Offline · Search & Destroy or Zombies', 'play', true),
+          item('02', 'Play Online', 'Public queue or private room code', 'online'),
+          item('03', 'Career & Rank', `Offline LV ${levelAt(this.profile.career.xp).level}${this.profile.onlineCareer ? ` · Online LV ${levelAt(this.profile.onlineCareer.xp).level} · ${rankLabel(this.profile.onlineCareer.rank)}` : ' · XP, daily challenges and competitive ranks'}`, 'career'),
+          item('04', 'Settings', 'Controls, video, audio, gameplay', 'settings'),
+          item('05', 'About', 'Game modes, credits and version', 'about')),
         h('div', { class: 'mm-links' }, link('Operators', 'agents'), h('i'), link('Loadout', 'loadout'), h('i'), link('How to play', 'help')),
         h('div', { class: 'mm-foot' }, 'Signed in as ', h('b', null, this.profile.name), ` · ${GAME_VERSION} · ↑ ↓ Enter to navigate`)),
       h('div', { class: 'mm-right' },

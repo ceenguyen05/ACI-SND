@@ -11,17 +11,27 @@ single-story building where the west half is offices (meeting rooms, engineering
 B-site bullpen) and the east half is manufacturing (A-site assembly line, factory floor,
 warehouse, shipping docks).
 
-* **Search & Destroy:** CS:GO / CS2-style bomb defusal against bots, in teams of 1v1 up to 5v5.
-* **Zombies (ACI HQ: Outbreak):** Call of Duty-style round-based survival for squads of 1, 3
-  or 5 (your teammates are bots). Start with a knife and a pistol and earn your way to perks,
+* **Search & Destroy:** CS-style bomb defusal, offline with bots or online in casual 1v1–5v5 and ranked 3v3–5v5 rooms.
+* **Zombies (ACI HQ: Outbreak):** round-based survival, offline with allied bots or online
+  with 1–5 human/bot survivors against AI zombies. Start with a knife and a pistol and earn your way to perks,
   wonder weapons and an exfil. See [docs/ZOMBIES.md](docs/ZOMBIES.md).
 
 It runs in the browser using TypeScript, Three.js and Vite. Models, animation and audio are
 generated in code, with three locally bundled CC0 scanned surface sets for the buildings.
-Everything is **offline, with bots**.
+Play offline with bots, or choose **Play Online** for Search & Destroy public matchmaking
+and private rooms with five-digit invitation codes. Teams support 1v1 through 5v5;
+rooms start when full, when the owner chooses Play now, or after three minutes with
+bots filling the open spots. Online play requires the included persistent game server;
+see [multiplayer setup and Vercel hosting](docs/MULTIPLAYER.md).
+Both modes earn career XP for kills, objectives, completions, wins and daily play.
+Online Ranked S&D adds placements, skill-based queues and Iron–Champion divisions;
+see [progression, ranks and persistence](docs/PROGRESSION.md).
 
 | Topic | Document |
 |---|---|
+| Step-by-step free GitHub + Vercel + Render + MySQL deployment | [docs/ONLINE_DEPLOYMENT.md](docs/ONLINE_DEPLOYMENT.md) |
+| Online multiplayer, rooms and Vercel setup | [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) |
+| XP, daily streaks, ranks and fair matchmaking | [docs/PROGRESSION.md](docs/PROGRESSION.md) |
 | Development plan | [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) |
 | Game design (rules, weapons, economy, bots) | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) |
 | Zombies mode (waves, zombie types, perks, prices, exfil, research) | [docs/ZOMBIES.md](docs/ZOMBIES.md) |
@@ -45,11 +55,12 @@ No VS Code extensions are required.
 ```bash
 npm install          # once
 npm run dev          # starts http://localhost:5173 and opens the browser
+npm run dev:online   # frontend + multiplayer server (for public/private online matches)
 ```
 
-Click the title screen. The main menu has **Play Now**, **Settings** and **About** (arrow keys and
-Enter work too), plus quick links to **Operators** (character customization), **Loadout** and
-**How to play**.
+Click the title screen. The main menu has **Play Now** (offline), **Play Online**, **Career & Rank**,
+**Settings** and **About** (arrow keys and Enter work too), plus quick links to **Operators**
+(character customization), **Loadout** and **How to play**.
 
 1. **Play Now** opens the mode select. Pick **Search & Destroy** or **Zombies**.
 2. Set up the match (S&D: side, team size, difficulty, length; Zombies: squad, difficulty,
@@ -306,15 +317,25 @@ ACI-SND/
 │  ├─ workflows/deploy.yml # CI, then publish to GitHub Pages (push to main)
 │  └─ ISSUE_TEMPLATE/, pull_request_template.md, dependabot.yml, CODEOWNERS
 ├─ index.html              # page shell (canvas + UI root)
+├─ Dockerfile, render.yaml # game server container / Render Blueprint (see docs/ONLINE_DEPLOYMENT.md)
+├─ .env.example            # every server and build setting, documented
+├─ server/                 # authoritative multiplayer server (Node + ws); runs src/sim headless
+│  ├─ index.ts             #   HTTP + WebSocket entry point, 64 Hz tick loop, /health and /ready
+│  ├─ LobbyService.ts      #   rooms, codes, matchmaking queue, bot fill, rewards, rank settlement
+│  ├─ matchmaking.ts       #   pure queue / skill-window / team-balance rules
+│  ├─ AccountStore.ts      #   anonymous device profiles and server-owned careers
+│  └─ MySqlPersistence.ts  #   optional MySQL storage adapter
 ├─ src/
 │  ├─ main.ts              # bootstrap + loading screen
 │  ├─ app/                 # application layer
 │  │  ├─ App.ts            #   state machine: title → menu → match; menu showcase camera
-│  │  ├─ GameSession.ts    #   one running match: fixed 64-tick loop, overlays, spectating
+│  │  ├─ GameSession.ts    #   one running match (offline or online): fixed 64-tick loop, overlays
 │  │  ├─ Input.ts          #   keyboard/mouse, pointer lock, key capture for rebinding
 │  │  ├─ PlayerController.ts  # input → AgentCommand (mouse look, lean, ADS, one-shot actions)
 │  │  ├─ AimAssist.ts      #   optional slow-down + pull near visible enemies (player only)
 │  │  └─ Profile.ts        #   saved profile/settings (localStorage)
+│  ├─ net/                 # online client: protocol + validation, snapshots, prediction replicas
+│  ├─ progression/         # XP, levels, daily challenges, ranks (shared by browser and server)
 │  ├─ config/              # tunable data tables
 │  │  ├─ rules.ts          #   match rules and lengths
 │  │  ├─ economy.ts
@@ -359,32 +380,31 @@ ACI-SND/
 │  │  └─ MatchView.ts      #   binds a Match to visuals/audio; camera; interpolation
 │  ├─ audio/Sfx.ts         # WebAudio synthesizer for every sound
 │  └─ ui/                  # DOM UI
-│     ├─ screens/          #   title, main menu (home/operators/loadout/settings/about/help), ModeSelect
+│     ├─ screens/          #   title, main menu, ModeSelect, Play Online, Career & Rank
 │     ├─ hud/              #   HUD, radar, crosshair, buy menu, scoreboard, pause, match end,
 │     │                    #   ZombiesHUD, Armory menu, zombies scoreboard / end screen
 │     ├─ components.ts, dom.ts
 │     └─ styles/main.css
-├─ tests/                  # Vitest: map validity, physics, combat, economy, full bot matches
-├─ scripts/
-│  ├─ boot-check.mjs       # CI: boots S&D and Zombies from /ACI-SND/ like GitHub Pages
-│  ├─ zombies-look.mjs     # Zombies browser run + screenshots (npm run test:zombies)
-│  ├─ lib/browser.mjs      # shared Chromium launch (GPU locally, SwiftShader on CI)
-│  ├─ smoke-test.mjs       # headless Chromium end-to-end test + screenshots
-│  ├─ bake-lighting.mjs    # offline lightmap + probe baker (npm run bake)
-│  ├─ look.mjs             # quick in-game views at one quality preset
-│  ├─ arsenal-look.mjs     # buy menu, new view models, barricades, killstreak views
-│  ├─ sights-look.mjs      # every gun's hip / aimed sight picture + measured recoil alignment
-│  ├─ screenshots.mjs      # map & view-model visual tour
-│  ├─ balance.mjs          # long bot-vs-bot balance report
-│  └─ print-map.mjs        # ASCII map dump
-├─ docs/                   # plan, design and map docs
+├─ tests/                  # Vitest (npm test)
+│  ├─ game/                #   map, physics, combat, economy, bots, complete bot-vs-bot matches
+│  ├─ zombies/             #   waves, machines, revives, models, long soak runs
+│  └─ online/              #   rooms, matchmaking, replication, real WebSocket server, storage, careers
+├─ scripts/                # Node + Playwright tooling (npm scripts wrap the common ones)
+│  ├─ lib/browser.mjs      #   shared Chromium launch (GPU locally, SwiftShader on CI)
+│  ├─ checks/              #   pass/fail browser checks: boot (CI), smoke, keys, handling, visual,
+│  │                       #   gunplay, Zombies and the two-browser online check
+│  ├─ visual/              #   screenshot tours for manual review (map, arsenal, sights, Gunsmith…)
+│  ├─ perf/                #   FPS, frame cost, draw calls, Zombies horde performance
+│  └─ tools/               #   light baker, surface-asset fetch, balance report, ASCII map,
+│                          #   dev:online launcher, diag (console/overlay dump)
+├─ docs/                   # design, map, Zombies, multiplayer, progression and deployment guides
 └─ public/                 # favicon, scanned surfaces, baked lightmaps (public/lightmaps/)
 ```
 
 **Design rule:** `src/sim` never touches the DOM or WebGL. The renderer, audio and UI subscribe
 to the simulation's `EventBus` and read its state each frame. Because of this, entire
-bot-vs-bot matches can run in Node tests, and the simulation can later move to an authoritative
-multiplayer server unchanged.
+bot-vs-bot matches run in Node tests, and the same simulation runs unchanged inside the
+authoritative multiplayer server.
 
 ## Testing & verification
 
@@ -393,24 +413,28 @@ multiplayer server unchanged.
 | `npm run check` | Typecheck + tests + production build: exactly what CI runs on every push |
 | `npm run check:boot` | Serves the build from `/ACI-SND/` (like GitHub Pages), boots it in headless Chromium, starts a Search & Destroy match and a Zombies game, and fails on any missing file or error. Runs in CI; needs a build first |
 | `npm run typecheck` | Strict TypeScript checks |
-| `npm test` | 146 unit and simulation tests: 16 Zombies tests (formulas, layout validity, waves, points, purchases, perks, revives, specials, power-ups, box and forge, every zombie kind, a bot squad, motor tunnelling) plus the Search & Destroy suite (plus an optional balance report), including prone and slide (clearance, hitboxes, crouch modes), Gunsmith attachments, rebuy/auto-buy, mantling, coyote time, burst fire, stun, throwing knives, the heartbeat sensor, pings and killcam recording, including movement (crouch-jump, stamina), wallbangs, foot placement, weapon handling, input buffering, aim assist, every gadget, the stim pistol, barricades, launchers, C4 and killstreaks. They cover map connectivity, prop/wall overlap, raycasts, damage/armor, spray patterns, economy, and **complete bot-vs-bot matches** (rounds, plants, halftime swap, money limits) |
+| `npm test` | 320+ unit, simulation and server tests. `tests/online/` covers rooms, matchmaking, input validation, snapshot replication and prediction, a real WebSocket server, MySQL/file storage, XP and ranks. `tests/zombies/` has the Zombies tests (formulas, layout validity, waves, points, purchases, perks, revives, specials, power-ups, box and forge, every zombie kind, a bot squad, motor tunnelling) plus the Search & Destroy suite (plus an optional balance report), including prone and slide (clearance, hitboxes, crouch modes), Gunsmith attachments, rebuy/auto-buy, mantling, coyote time, burst fire, stun, throwing knives, the heartbeat sensor, pings and killcam recording, including movement (crouch-jump, stamina), wallbangs, foot placement, weapon handling, input buffering, aim assist, every gadget, the stim pistol, barricades, launchers, C4 and killstreaks. They cover map connectivity, prop/wall overlap, raycasts, damage/armor, spray patterns, economy, and **complete bot-vs-bot matches** (rounds, plants, halftime swap, money limits) |
 | `npm run smoke` | Builds, serves, and drives the real game in headless Chromium: title → every menu page → start match → buy menu purchase → quality presets with FPS readout → an accelerated all-bot match until it ends. Fails on any console error and saves screenshots to `screenshots/` |
 | `npm run screenshots` | Visual tour of 16 map locations and 8 view models (`screenshots/tour/`) |
 | `npm run perf` | FPS per graphics preset on your GPU |
 | `npm run bake` | Re-bake the map's lightmaps after changing the map (about 10 s) |
-| `node scripts/arsenal-look.mjs` | Screenshots of the buy menu, new view models, barricades, RPG blast and missile view (`screenshots/arsenal/`) |
-| `node scripts/sights-look.mjs [--spray] [--dpr=1.5]` | Every gun at the hip and aimed at a target, with 3× centre crops marked at the exact screen centre. `--spray` fires real bursts and prints how far the crosshair sits from the last impact (`screenshots/sights/`) |
+| `node scripts/visual/arsenal-look.mjs` | Screenshots of the buy menu, new view models, barricades, RPG blast and missile view (`screenshots/arsenal/`) |
+| `node scripts/visual/sights-look.mjs [--spray] [--dpr=1.5]` | Every gun at the hip and aimed at a target, with 3× centre crops marked at the exact screen centre. `--spray` fires real bursts and prints how far the crosshair sits from the last impact (`screenshots/sights/`) |
 | `npm run test:handling` | Real keyboard/mouse movement, jump, crouch, hold-to-prone, release-to-stand, slide/cooldown, automatic fire, reload and ADS checks, plus screenshots and graphics-preset measurements in `screenshots/handling/` |
 | `npm run test:visual` | High-quality character poses, architecture, weapon animation, WebGL errors and repeated gadget cleanup; screenshots, a motion-review video and a JSON report in `screenshots/visual/` |
 | `npm run test:keys` | Presses the new combat keys in the real game (quick melee, self-stim, killstreak, C4 detonate, cameras, ping, stim dart, weapon light) and checks each one works |
-| `node scripts/qol-look.mjs` | Screenshots of the round tips, Rebuy / Auto-buy, objective markers and the settings page (`screenshots/qol/`) |
-| `node scripts/frame-cost.mjs` | Per-frame CPU cost (simulation, view, HUD, render) per quality preset – unaffected by other load on the machine |
-| `node scripts/gunsmith-look.mjs` | Buys and fits attachments through the real buy menu, then screenshots the Gunsmith tab, a kitted rifle, red-dot / holo / ACOG aiming, an enemy laser and an enemy light (`screenshots/gunsmith/`) |
-| `node scripts/moments-look.mjs` | Screenshots of the new guns, gear, heartbeat screen, pings, stun, multi-kill banner and the killcam, then checks the next round starts (`screenshots/moments/`) |
+| `node scripts/visual/qol-look.mjs` | Screenshots of the round tips, Rebuy / Auto-buy, objective markers and the settings page (`screenshots/qol/`) |
+| `node scripts/perf/frame-cost.mjs` | Per-frame CPU cost (simulation, view, HUD, render) per quality preset – unaffected by other load on the machine |
+| `node scripts/visual/gunsmith-look.mjs` | Buys and fits attachments through the real buy menu, then screenshots the Gunsmith tab, a kitted rifle, red-dot / holo / ACOG aiming, an enemy laser and an enemy light (`screenshots/gunsmith/`) |
+| `node scripts/visual/moments-look.mjs` | Screenshots of the new guns, gear, heartbeat screen, pings, stun, multi-kill banner and the killcam, then checks the next round starts (`screenshots/moments/`) |
 | `npm run balance [difficulty] [seeds]` | Win-rate and kill statistics over ~60 simulated rounds |
 | `npm run test:zombies` | Plays Zombies in the browser through the new menus with a bot squad, then stages every zombie type, the machines, power-ups, hazards, downed / revive, armory, exfil and end screen; reports horde FPS and fails on console errors (`screenshots/zombies/`) |
-| `SOAK=1 npx vitest run tests/zombies-soak.test.ts --silent=false` | Long all-bot Zombies games: progression, per-system timings, no stalled waves, nobody stuck in a closed area |
-| `npm run verify` | Full pre-release pass: `check` + `check:boot` + smoke test + real-key check (needs a GPU) |
+| `SOAK=1 npx vitest run tests/zombies/zombies-soak.test.ts --silent=false` | Long all-bot Zombies games: progression, per-system timings, no stalled waves, nobody stuck in a closed area |
+| `npm run test:online` | Only the online/server/progression tests (`tests/online/`) |
+| `npm run test:online:browser` | Two real browsers against the real game server: private room, Play now, purchases, gunfire, movement, bot takeover, public queue, co-op Zombies revive/Armory and online XP |
+| `npm run test:gunplay` | Real-browser gunplay regression with visual evidence |
+| `npm run diag` | Loads the build in Chromium and prints console output and any fatal-error overlay (`-- --dev` for readable dev-server stacks) |
+| `npm run verify` | Full pre-release pass: `check` + `check:boot` + smoke, real-key, Zombies and two-browser online checks (needs a GPU) |
 
 `npx playwright install chromium` downloads the headless browser that the smoke test uses. It
 is already installed on this machine. Add `--swiftshader` to any browser script to use
@@ -418,16 +442,24 @@ software rendering like CI does.
 
 ## Deployment
 
-GitHub Actions runs on every push and pull request and publishes `main` to GitHub Pages:
+GitHub Actions runs on every push and pull request:
 
 | Event | What runs |
 |---|---|
 | Push to any other branch / open a PR | **CI**: typecheck, tests, build, then a browser boot check of the build |
-| Push to `main` (or Actions → *Deploy to GitHub Pages* → Run workflow) | **CI**, then the tested build is published to https://ceenguyen05.github.io/ACI-SND/ |
+| Push to `main` (or Actions → *Deploy to GitHub Pages* → Run workflow) | **CI**, then the tested build is published to https://ceenguyen05.github.io/ACI-SND/ (set the Actions variable `DEPLOY_GITHUB_PAGES=false` to skip Pages) |
 
 A failing check stops the deploy, so the live site keeps the last good version.
-`/version.json` on the site shows which commit is live. The one-time Pages setting, rollback,
-custom domains and troubleshooting are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`/version.json` on the site shows which commit is live.
+
+| Piece | Host | Deploys |
+|---|---|---|
+| Game website | Vercel (Git integration) or GitHub Pages | Static `dist/` from `npm run build`; set `VITE_MULTIPLAYER_URL` to the game server's `wss://…/online` |
+| Multiplayer server | Render (`render.yaml`) or any Node/Docker host | `npm start`; Render redeploys `main` after CI passes |
+| Online profiles | MySQL (Aiven) or a persistent `DATA_DIR` volume | Server-only credentials, never `VITE_*` |
+
+Step-by-step setup: [docs/ONLINE_DEPLOYMENT.md](docs/ONLINE_DEPLOYMENT.md). CI, Pages, rollback
+and troubleshooting: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Performance
 
@@ -457,7 +489,7 @@ If the game stutters:
 ## Roadmap
 
 See [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md#8-future-work-post-v1):
-* online multiplayer (authoritative server reusing `src/sim`);
+* rejoining a running online match after a disconnect;
 * more maps;
 * destructible soft walls (breach charges already open barricades);
 * more killstreaks (care package, sentry);

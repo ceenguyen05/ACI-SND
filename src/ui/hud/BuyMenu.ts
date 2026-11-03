@@ -98,6 +98,10 @@ export class BuyMenu {
     if (!p) return;
     const before = p.money;
     const n = kind === 'rebuy' ? this.match.rebuy(p) : this.match.autoBuy(p);
+    if ('remote' in this.match && n > 0) {
+      this.infoEl.textContent = 'Purchase requested. Waiting for server confirmation…';
+      return;
+    }
     if (n > 0) sfx.buy(); else sfx.denied();
     this.infoEl.textContent = n > 0 ? `${kind === 'rebuy' ? 'Rebought' : 'Auto-bought'} ${n} item${n > 1 ? 's' : ''} for $${before - p.money}`
       : kind === 'rebuy' ? (p.lastBuys.length ? 'Nothing left to rebuy (already owned or not enough money)' : 'Nothing to rebuy yet – buy something this round first')

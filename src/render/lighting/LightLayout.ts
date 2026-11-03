@@ -129,7 +129,7 @@ export function buildLayout(world: World): LightLayout {
   const ceiling: Region = { ...place(ceilTW, ceilTH), tw: ceilTW, th: ceilTH, texel: CEIL_TEXEL,
     origin: [map.originX, 0, map.originZ], u: [1, 0, 0], v: [0, 0, 1], normal: [0, -1, 0] };
   // Tall faces first keeps shelves tight; ties broken by stable face order.
-  const order = faces.map((f, i) => i).sort((a, b) => faces[b].height - faces[a].height || a - b);
+  const order = faces.map((_, i) => i).sort((a, b) => faces[b].height - faces[a].height || a - b);
   const walls: Region[] = new Array(faces.length);
   for (const i of order) {
     const f = faces[i];

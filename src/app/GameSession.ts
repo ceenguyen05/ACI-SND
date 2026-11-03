@@ -9,7 +9,7 @@ import { HUD } from '../ui/hud/HUD';
 import { BuyMenu } from '../ui/hud/BuyMenu';
 import { MatchEndScreen, PauseMenu, Scoreboard } from '../ui/hud/Overlays';
 import { SettingsPanel } from '../ui/screens/SettingsPanel';
-import { h } from '../ui/dom';
+import { h, setText } from '../ui/dom';
 import { sfx } from '../audio/Sfx';
 import type { Input } from './Input';
 import { PlayerController } from './PlayerController';
@@ -22,6 +22,13 @@ import { ACI_HQ_ZOMBIES } from '../sim/maps/aciHqZombies';
 import { ZombiesView } from '../render/ZombiesView';
 import { ZombiesHUD } from '../ui/hud/ZombiesHUD';
 import { ArmoryMenu, ZombiesEndScreen, ZombiesScoreboard } from '../ui/hud/ZombiesOverlays';
+import { RemoteMatch } from '../net/RemoteMatch';
+import type { OnlineClient } from '../net/OnlineClient';
+import type { MatchStart } from '../net/protocol';
+import { emptyCommand } from '../sim/entities/Agent';
+import { RemoteZombiesMatch } from '../net/RemoteZombiesMatch';
+import { MatchRewards } from '../progression/MatchRewards';
+import { levelAt, rankLabel, type Award } from '../progression/career';
 
 export type GameMode = 'snd' | 'zombies';
 
@@ -34,9 +41,12 @@ export interface SessionOptions {
   /** Zombies debug: start on this wave with these points. */
   startWave?: number;
   startPoints?: number;
+  online?: { client: OnlineClient; match: MatchStart };
 }
 
 const DT = 1 / MOVE.tickRate;
+/** crypto.randomUUID needs a secure context; plain-HTTP LAN play (dev:online) does not have one. */
+const localMatchId = () => crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
 
 /** One running match: fixed-tick simulation + view + HUD + overlays + input routing. */
 export class GameSession {
@@ -61,8 +71,19 @@ export class GameSession {
   private expectUnlock = false;
   private spectateIdx = 0;
   private freeYaw = 0;
+  private online: OnlineClient | null = null;
+  private netStatus: HTMLElement | null = null;
+  private connectionLost = false;
+  private rewards: MatchRewards | null = null;
+  private xpStatus: HTMLElement;
+  private xpMessage = '';
+  private xpUntil = 0;
+  private earnedXp = 0;
+  private rankDelta: number | null = null;
+  private resultCareer: HTMLElement | null = null;
   /** performance.now() when the killcam should start (0 = none pending). */
   private killcamAt = 0;
+  private holdUseUntilRelease = false;
   timeScale: number;
   onExit: () => void = () => {};
   /** Zombies end screen "Play again". */
@@ -73,7 +94,11 @@ export class GameSession {
     const mp = profile.match;
     const len = MATCH_LENGTHS[mp.length];
     const side: Team | 'spectator' = opts.spectate ? 'spectator' : mp.side === 'auto' ? (Math.random() < 0.5 ? 'T' : 'CT') : mp.side;
-    if (opts.mode === 'zombies') {
+    if (opts.online) {
+      this.online = opts.online.client;
+      if (opts.online.match.mode === 'zombies') { this.zm = new RemoteZombiesMatch(this.online, opts.online.match); this.match = this.zm; }
+      else { this.zm = null; this.match = new RemoteMatch(this.online, opts.online.match); }
+    } else if (opts.mode === 'zombies') {
       const zp = profile.zombies;
       this.zm = new ZombiesMatch({
         layout: ACI_HQ_ZOMBIES, difficulty: zp.difficulty, players: zp.players, length: zp.length, playerName: profile.name, playerLook: profile.looks,
@@ -87,7 +112,7 @@ export class GameSession {
         rules: { roundsToWin: len.roundsToWin, halfLength: len.halfLength, teamSize: mp.teamSize, freezeTime: mp.freezeTime, friendlyFire: mp.friendlyFire, killstreaks: mp.killstreaks ?? true, ...opts.rules },
       });
     }
-    this.timeScale = opts.timeScale ?? 1;
+    this.timeScale = this.online ? 1 : opts.timeScale ?? 1;
     this.ctrl = new PlayerController(input, profile.settings);
     this.ctrl.assist = makeAimAssist(this.match, () => this.profile.settings.aimAssist ?? 'off');
     const settings = () => this.profile.settings;
@@ -112,7 +137,7 @@ export class GameSession {
         if (tip && zm.player) setTimeout(() => { if (!this.ended) this.hud.showTip(tip, 11); }, 3600);
       });
     }
-    this.pause = new PauseMenu(() => this.resume(), () => this.openSettings(), () => this.quit());
+    this.pause = new PauseMenu(() => this.resume(), () => this.openSettings(), () => this.quit(), !!this.online, !!opts.online?.match.ranked);
     const panel = new SettingsPanel(settings, (s) => { this.applySettings(s); this.ctrl.setSettings(s); }, input);
     this.settingsOverlay = h('div', { class: 'overlay-dim hidden' },
       h('div', { class: 'panel', style: 'padding:22px;max-height:90vh;overflow:auto' }, panel.el,
@@ -121,13 +146,39 @@ export class GameSession {
     this.root = h('div', { style: 'position:absolute;inset:0' },
       this.hud.el, this.zhud?.el ?? null, this.scoreboard.el, this.buy.el, this.armory?.el ?? null, this.pause.el, this.settingsOverlay, this.clickToPlay);
     uiRoot.append(this.root);
+    this.xpStatus = h('div', { class: 'xp-status' }); this.root.append(this.xpStatus);
+    const showAwards = (awards: Award[]) => {
+      const xp = awards.reduce((n, a) => n + a.xp, 0);
+      if (xp) { this.earnedXp += xp; this.xpMessage = `+${xp} XP · ${awards.at(-1)!.label}`; this.xpUntil = performance.now() + 3500; }
+    };
+    if (!this.online && this.match.player && this.timeScale === 1) this.rewards = new MatchRewards(this.match, this.match.player.id, profile.career, localMatchId(), Date.now, .5,
+      awards => { showAwards(awards); this.saveProfile(); });
+    if (this.online) {
+      const client = this.online;
+      client.onCareer = (career, awards, rankDelta) => {
+        profile.onlineCareer = career; this.saveProfile(); showAwards(awards);
+        if (rankDelta !== undefined) { this.rankDelta = rankDelta; this.hud.showCenter(`${rankLabel(career.rank)} · ${rankDelta >= 0 ? '+' : ''}${rankDelta} RP`, 6); }
+        this.refreshCareerResult();
+      };
+      this.netStatus = h('div', { class: 'net-status' });
+      this.root.append(this.netStatus);
+      client.onError = message => this.hud.showCenter(message, 4);
+      client.onClose = () => {
+        this.connectionLost = true;
+        this.expectUnlock = true; this.input.exitLock(); this.input.gameFocus = false;
+        this.root.append(h('div', { class: 'overlay-dim', style: 'z-index:90' }, h('div', { class: 'panel online-disconnected' },
+          h('h2', null, 'Connection lost'), h('p', null, 'Your slot is now controlled by a bot. Return to the menu to join another match.'),
+          h('button', { class: 'btn primary', onclick: () => this.quit() }, 'Return to menu'))));
+      };
+    }
 
     if (this.match.player) this.ctrl.syncFrom(this.match.player);
     this.match.events.on('roundStart', () => { if (this.match.player) this.ctrl.syncFrom(this.match.player); this.spectateIdx = 0; });
     this.match.events.on('matchEnd', () => this.onMatchEnd());
+    this.match.events.on('zRespawn', e => { if (e.agentId === this.match.player?.id) this.ctrl.syncFrom(this.match.player!); });
     this.match.events.on('roundEnd', (e) => {
       // CoD S&D: the round-winning elimination is replayed from the killer's eyes
-      this.killcamAt = e.reason === 'elimination' && (this.profile.settings.killcam ?? true) && this.timeScale <= 1 ? performance.now() + 1300 : 0;
+      this.killcamAt = !this.online && e.reason === 'elimination' && (this.profile.settings.killcam ?? true) && this.timeScale <= 1 ? performance.now() + 1300 : 0;
     });
     this.match.events.on('roundStart', (e) => {
       this.killcamAt = 0; this.view.stopKillcam();
@@ -184,6 +235,7 @@ export class GameSession {
 
   private openArmory() {
     if (!this.armory || this.armory.visible) return;
+    this.clickToPlay.classList.add('hidden');
     this.expectUnlock = true;
     this.input.exitLock();
     this.input.gameFocus = false;
@@ -192,9 +244,7 @@ export class GameSession {
   private closeArmory() {
     if (!this.armory) return;
     this.armory.hide();
-    // the F that closed the menu is still held: don't let it count as a new press at the bench
-    const zp = this.zm?.player?.zp;
-    if (zp) zp.usePrev = true;
+    this.holdUseUntilRelease = true;
     this.input.gameFocus = true;
     if (!this.paused) this.lock();
   }
@@ -204,7 +254,7 @@ export class GameSession {
   private setPaused(p: boolean) {
     this.paused = p;
     this.pause.show(p);
-    if (p) { this.buy.hide(); this.armory?.hide(); this.input.gameFocus = false; }
+    if (p) { this.buy.hide(); this.armory?.hide(); this.clickToPlay.classList.add('hidden'); this.input.gameFocus = false; }
   }
   private resume() { this.setPaused(false); this.input.gameFocus = true; this.lock(); }
   private openSettings() { this.pause.show(false); this.settingsOverlay.classList.remove('hidden'); }
@@ -213,6 +263,7 @@ export class GameSession {
   private openBuy() {
     const p = this.match.player;
     if (!p || !this.match.canBuyNow(p)) { this.hud.showCenter('You can only buy in your spawn during buy time', 1.5); return; }
+    this.clickToPlay.classList.add('hidden');
     this.expectUnlock = true;
     this.input.exitLock();
     this.input.gameFocus = false;
@@ -225,18 +276,21 @@ export class GameSession {
   }
 
   private onMatchEnd() {
+    this.rewards?.finish(this.match.time >= 90);
     this.ended = true;
     this.input.exitLock();
     this.input.gameFocus = false;
     if (this.zm) { this.onZombiesEnd(this.zm); return; }
     const me = this.match.player;
-    if (me) {
+    // Profile stats are the offline record; online results live in the server-owned career.
+    if (me && !this.online) {
       const st = this.profile.stats;
       st.matches++; st.kills += me.stats.kills; st.deaths += me.stats.deaths; st.mvps += me.stats.mvps;
       if (this.match.winner === me.team) st.wins++;
       this.saveProfile();
     }
     const scr = new MatchEndScreen(this.match, () => { scr.el.remove(); this.onExit(); });
+    this.attachCareerResult(scr.el);
     this.root.append(scr.el);
   }
 
@@ -244,8 +298,8 @@ export class GameSession {
     this.armory?.hide();
     const zs = this.profile.zstats, me = zm.player, diff = zm.zc.difficulty;
     const prev = zs.best[diff] ?? 0;
-    const newBest = !!me && zm.wave > prev;
-    if (me) {
+    const newBest = !!me && !this.online && zm.wave > prev;
+    if (me && !this.online) {
       const st = me.zp!.stats;
       zs.games++; zs.kills += st.kills; zs.headshots += st.headshots; zs.downs += st.downs; zs.revives += st.revives;
       if (zm.won) zs.exfils++;
@@ -253,9 +307,21 @@ export class GameSession {
       this.saveProfile();
     }
     setTimeout(() => {
-      const scr = new ZombiesEndScreen(zm, Math.max(prev, zm.wave), newBest, () => { scr.el.remove(); this.onRestart(); }, () => { scr.el.remove(); this.onExit(); });
+      if (!this.root.isConnected) return;
+      const scr = new ZombiesEndScreen(zm, Math.max(prev, zm.wave), newBest, () => { scr.el.remove(); if (this.online) this.onExit(); else this.onRestart(); }, () => { scr.el.remove(); this.onExit(); }, !!this.online);
+      this.attachCareerResult(scr.el);
       this.root.append(scr.el);
     }, zm.won ? 2200 : 1500);
+  }
+
+  private attachCareerResult(el: HTMLElement) {
+    this.resultCareer = h('p', { class: 'career-result', style: 'color:#ffce7b;text-align:center' });
+    (el.querySelector('.panel') ?? el).append(this.resultCareer); this.refreshCareerResult();
+  }
+  private refreshCareerResult() {
+    if (!this.resultCareer) return;
+    const c = this.online ? this.profile.onlineCareer : this.profile.career;
+    this.resultCareer.textContent = c ? `+${this.earnedXp} XP · ${this.online ? 'Online' : 'Offline'} Level ${levelAt(c.xp).level}${this.online ? ` · ${rankLabel(c.rank)}` : ''}${this.rankDelta !== null ? ` · ${this.rankDelta >= 0 ? '+' : ''}${this.rankDelta} RP` : ''}` : 'Loading career result…';
   }
 
   /** Choose whose eyes we see through. */
@@ -275,7 +341,18 @@ export class GameSession {
   }
 
   update(frameDt: number) {
+    if (this.match instanceof RemoteMatch || this.match instanceof RemoteZombiesMatch) {
+      this.view.beforeStep(); this.match.receiveSnapshot(); this.view.afterStep();
+      if (this.netStatus) {
+        const client = this.online!;
+        const stale = performance.now() - client.lastSnapshotAt > 1500;
+        setText(this.netStatus, this.connectionLost ? 'Disconnected' : stale ? 'Waiting for server…' : `ONLINE · ${client.pingMs} ms`);
+        this.netStatus.classList.toggle('stale', stale || this.connectionLost);
+      }
+    }
     const input = this.input, m = this.match, me = m.player;
+    const career = this.online ? this.profile.onlineCareer : this.profile.career;
+    setText(this.xpStatus, career ? `LV ${levelAt(career.xp).level} · ${this.online ? 'Online' : 'Offline'} XP${this.earnedXp ? ` · +${this.earnedXp} this match` : ''}${performance.now() < this.xpUntil ? ` · ${this.xpMessage}` : ''}` : '');
     const s = this.profile.settings;
 
     // ---- menu keys --------------------------------------------------------------
@@ -317,14 +394,18 @@ export class GameSession {
       if (me && me.alive && me.operating === null && !this.view.killcam) this.r.viewModel.onInspect();
     }
     const look = { yaw: this.ctrl.yaw, pitch: this.ctrl.pitch };
-    if (!this.paused && !this.view.killcam) {
+    if ((!this.paused && !this.view.killcam) || this.online) {
       this.acc += Math.min(0.25, frameDt) * this.timeScale;
       let steps = 0;
       const maxSteps = Math.max(8, Math.ceil(this.timeScale * 6));
       while (this.acc >= DT && steps < maxSteps) {
         this.pickView();
         this.view.beforeStep();
-        m.setPlayerCommand(this.ctrl.command(me));
+        let command = this.ctrl.command(me);
+        // The Use key that closed the Armory is often still held; it must not reopen it (offline or on the server).
+        if (this.holdUseUntilRelease) { if (command.use) command = { ...command, use: false }; else this.holdUseUntilRelease = false; }
+        m.setPlayerCommand(this.online && (this.paused || this.ended || this.connectionLost || !this.input.locked || !this.input.gameFocus)
+          ? { ...emptyCommand(), yaw: this.ctrl.yaw, pitch: this.ctrl.pitch } : command);
         m.step(DT);
         this.view.afterStep();
         this.acc -= DT;
@@ -337,15 +418,20 @@ export class GameSession {
     if (feed) { this.ctrl.yaw = feed.yaw; this.ctrl.pitch = feed.pitch; } // cameras clamp their look
     const viewing = this.view.viewAgent;
     if (viewing && viewing !== me) { look.yaw = viewing.yaw; look.pitch = viewing.pitch; }
-    this.view.frame(frameDt, this.paused ? 1 : this.acc / DT, look, { dx: this.ctrl.lastDX, dy: this.ctrl.lastDY });
+    this.view.frame(frameDt, this.paused && !this.online ? 1 : this.acc / DT, look, { dx: this.ctrl.lastDX, dy: this.ctrl.lastDY });
     this.zview?.frame(frameDt);
     this.hud.update(frameDt, this.r.camera, look.yaw, this.view.smokeDensity(), this.buy.visible || !!this.armory?.visible);
     this.zhud?.update(frameDt, this.r.camera);
-    if (!input.locked && !this.paused && !this.buy.visible && !this.armory?.visible && !this.ended && me) this.clickToPlay.classList.remove('hidden');
+    this.clickToPlay.classList.toggle('hidden', input.locked || this.paused || this.buy.visible || !!this.armory?.visible || this.ended || !me || this.connectionLost);
   }
 
   dispose() {
+    if (this.online) {
+      this.online.onClose = () => {}; this.online.onError = () => {}; this.online.onStart = () => {}; this.online.onLobby = () => {}; this.online.onCareer = () => {};
+      this.online.close();
+    }
     announcer.stop();
+    this.rewards?.dispose();
     this.input.gameFocus = false;
     this.input.onLockChange = () => {};
     this.zview?.dispose();

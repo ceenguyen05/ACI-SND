@@ -110,7 +110,7 @@ export interface Hitbox { group: HitGroup; minX: number; minY: number; minZ: num
 let NEXT_ID = 1;
 
 export class Agent {
-  readonly id = NEXT_ID++;
+  readonly id: number;
   name: string;
   team: Team;
   isBot: boolean;
@@ -217,7 +217,8 @@ export class Agent {
   /** Zombies mode: set on human players (points, perks, downed state). */
   zp: ZPlayerState | null = null;
 
-  constructor(name: string, team: Team, isBot: boolean, look: Record<Team, AgentLook>) {
+  constructor(name: string, team: Team, isBot: boolean, look: Record<Team, AgentLook>, id?: number) {
+    this.id = id ?? NEXT_ID++;
     this.name = name;
     this.team = team;
     this.isBot = isBot;

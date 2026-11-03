@@ -46,12 +46,12 @@ export class Scoreboard {
 
 export class PauseMenu {
   readonly el: HTMLDivElement;
-  constructor(onResume: () => void, onSettings: () => void, onQuit: () => void) {
+  constructor(onResume: () => void, onSettings: () => void, onQuit: () => void, online = false, ranked = false) {
     const b = (label: string, fn: () => void, cls = 'btn') => h('button', { class: cls, onclick: () => { sfx.ui_click(); fn(); } }, label);
     this.el = h('div', { class: 'overlay-dim hidden' },
-      h('div', { class: 'pause panel' }, h('h2', null, 'PAUSED'),
+      h('div', { class: 'pause panel' }, h('h2', null, online ? 'MATCH MENU' : 'PAUSED'),
         b('Resume', onResume, 'btn primary'), b('Settings', onSettings), b('Quit to Main Menu', onQuit),
-        h('div', { class: 'muted', style: 'font-size:12px;text-align:center;margin-top:8px' }, 'The match is paused while this menu is open.')));
+        h('div', { class: 'muted', style: 'font-size:12px;text-align:center;margin-top:8px' }, online ? `Online play continues while this menu is open. Quitting forfeits match-completion XP${ranked ? ' and counts as a Ranked loss' : ''}.` : 'The match is paused while this menu is open.')));
   }
   show(on: boolean) { this.el.classList.toggle('hidden', !on); }
 }

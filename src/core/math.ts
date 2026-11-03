@@ -5,7 +5,6 @@ export const TAU = Math.PI * 2;
 
 export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-export const invLerp = (a: number, b: number, v: number) => clamp((v - a) / (b - a), 0, 1);
 
 /** Frame-rate independent exponential smoothing. */
 export const damp = (current: number, target: number, lambda: number, dt: number) =>
@@ -38,12 +37,6 @@ export function yawTo(dx: number, dz: number): number {
   return Math.atan2(-dx, -dz);
 }
 
-export function anglesFromDir(d: Vector3): { yaw: number; pitch: number } {
-  const len = Math.hypot(d.x, d.y, d.z) || 1;
-  return { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(clamp(d.y / len, -1, 1)) };
-}
-
-export const dist2D = (ax: number, az: number, bx: number, bz: number) => Math.hypot(bx - ax, bz - az);
 
 export interface Rect { x0: number; z0: number; x1: number; z1: number }
 export const inRect = (r: Rect, x: number, z: number) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;

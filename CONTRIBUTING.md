@@ -27,13 +27,20 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how CI and deploys work.
 * **Assets:** reference files in `public/` with relative paths or `import.meta.env.BASE_URL`,
   never `/absolute` paths. The site is served from `/ACI-SND/`. File names are
   case-sensitive on GitHub Pages.
-* **New mechanics:** add a test in `tests/` (the simulation is deterministic, so seed a
-  `Match` and step it). For input or visual changes, run `npm run test:keys` /
+* **New mechanics:** add a test in `tests/game/`, `tests/zombies/` or `tests/online/` (the
+  simulation is deterministic, so seed a `Match` and step it). For input or visual changes,
+  run `npm run test:keys` /
   `npm run test:handling` / `npm run test:visual` locally (they need a GPU).
 * **Zombies:** tuning lives in `src/config/zombies.ts`, the map layout (zones, shutters,
   wall-buys, machines) in `src/sim/maps/aciHqZombies.ts`. A layout test checks every machine
   stands against a wall and clear of props. Run `npm run test:zombies` for a browser pass and
-  `SOAK=1 npx vitest run tests/zombies-soak.test.ts --silent=false` for long bot games.
+  `SOAK=1 npx vitest run tests/zombies/zombies-soak.test.ts --silent=false` for long bot games.
+* **Online play:** run `npm run dev:online` for the frontend plus game server. The server is
+  authoritative: clients send only commands, so validate every new message field in
+  `src/net/protocol.ts` and cover it in `tests/online/`. Matchmaking rules live in
+  `server/matchmaking.ts`. Run `npm run test:online:browser` (needs a GPU) before release.
+* **Scripts:** browser checks are in `scripts/checks/`, screenshot tours in `scripts/visual/`,
+  performance probes in `scripts/perf/` and one-off tools in `scripts/tools/`.
 * **Docs:** controls go in the README table and the in-game *How to play* page
   (`src/ui/screens/MainMenu.ts`); Search & Destroy rules in `docs/GAME_DESIGN.md`, Zombies
   rules and numbers in `docs/ZOMBIES.md`.
