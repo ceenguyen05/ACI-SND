@@ -141,6 +141,64 @@ export const TEX = {
     speckle(g, w, h, r, 15000, '#b8c0b4', 0.5, 2);
     grid(g, w, h, 256, 'rgba(60,64,58,0.45)', 2);
   }),
+  /** Wood-look luxury vinyl plank: 0.18 x 1.2 m staggered planks in a warm grey oak. */
+  lvt: () => make('lvt', 512, 2.4, 2.4, (g, w, h, r) => {
+    const rows = 13, ph = h / rows, pl = w / 2;
+    for (let j = 0; j < rows; j++) {
+      const off = ((j * 0.37) % 1) * pl;
+      for (let k = -1; k < 3; k++) {
+        const x = k * pl + off;
+        const v = r.int(-14, 12);
+        g.fillStyle = `rgb(${168 + v},${150 + v},${124 + v})`;
+        g.fillRect(x, j * ph, pl, ph);
+        // grain: long faint streaks and a couple of knots per plank
+        for (let s = 0; s < 9; s++) {
+          g.fillStyle = `rgba(92,70,46,${0.05 + r.next() * 0.1})`;
+          g.fillRect(x + r.next() * pl * 0.2, j * ph + r.next() * ph, pl * r.range(0.4, 0.95), 1);
+        }
+        if (r.chance(0.35)) { g.fillStyle = 'rgba(96,72,48,0.22)'; g.beginPath(); g.ellipse(x + r.range(20, pl - 20), j * ph + ph / 2, 6, 2.5, 0, 0, Math.PI * 2); g.fill(); }
+        g.fillStyle = 'rgba(58,44,30,0.55)'; g.fillRect(x, j * ph, 2, ph);
+      }
+      g.fillStyle = 'rgba(58,44,30,0.5)'; g.fillRect(0, j * ph, w, 1.5);
+    }
+    speckle(g, w, h, r, 4000, '#6e5a42', 0.12);
+  }),
+  /** Static-dissipative (ESD) vinyl tile: 0.6 m squares, grey with dark conductive veining. */
+  esd: () => make('esd', 512, 1.2, 1.2, (g, w, h, r) => {
+    const s = w / 2;
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+      const v = r.int(-6, 6);
+      g.fillStyle = `rgb(${134 + v},${140 + v},${148 + v})`;
+      g.fillRect(i * s, j * s, s, s);
+      g.save(); g.beginPath(); g.rect(i * s, j * s, s, s); g.clip();
+      g.strokeStyle = 'rgba(32,36,42,0.55)';
+      for (let k = 0; k < 16; k++) {
+        g.lineWidth = 0.6 + r.next() * 1.2;
+        g.beginPath();
+        let x = i * s + r.next() * s, y = j * s + r.next() * s;
+        g.moveTo(x, y);
+        const a = r.range(0, Math.PI);
+        for (let q = 0; q < 5; q++) { x += Math.cos(a) * r.range(10, 30) + r.range(-8, 8); y += Math.sin(a) * r.range(10, 30) + r.range(-8, 8); g.lineTo(x, y); }
+        g.stroke();
+      }
+      g.restore();
+    }
+    speckle(g, w, h, r, 9000, '#3d434b', 0.35);
+    speckle(g, w, h, r, 4000, '#c3cad3', 0.25);
+    grid(g, w, h, s, 'rgba(48,52,58,0.7)', 2);
+  }),
+  /** Restroom porcelain: 0.3 m light-grey squares with grout lines. */
+  porcelain: () => make('porcelain', 512, 1.2, 1.2, (g, w, h, r) => {
+    const n = 4, s = w / n;
+    fill(g, w, h, '#a2a49f');
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const v = r.int(-5, 5);
+      g.fillStyle = `rgb(${214 + v},${215 + v},${211 + v})`;
+      g.fillRect(i * s + 2, j * s + 2, s - 4, s - 4);
+    }
+    speckle(g, w, h, r, 7000, '#9a9c97', 0.3);
+    blotches(g, w, h, r, 10, 'rgba(255,255,255,1)', 0.06, 40);
+  }),
   concrete: () => make('concrete', 512, 4, 4, (g, w, h, r) => {
     fill(g, w, h, '#8a8781');
     blotches(g, w, h, r, 65, 'rgba(70,68,62,1)', 0.09, 105);
@@ -337,6 +395,15 @@ export const TEX = {
     g.font = 'bold 54px Arial, sans-serif'; g.fillText('RF TEST CHAMBER', w / 2, 72);
     g.font = 'bold 28px Arial, sans-serif'; g.fillText('KEEP DOOR CLOSED DURING TEST', w / 2, 140);
   }),
+  /** Knotted netting (pitching backstop): dark cord on a transparent ground, 5 cm mesh. */
+  net: () => make('net', 128, 0.4, 0.4, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(38,40,44,1)'; g.lineWidth = 2;
+    for (let i = 0; i <= w; i += 16) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke();
+      g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke();
+    }
+  }),
   hazard: () => make('hazard', 128, 0.5, 0.5, (g, w, h) => {
     fill(g, w, h, '#e8b818');
     g.fillStyle = '#151515';
@@ -412,14 +479,24 @@ export function siteDecal(letter: string): Texture {
 }
 
 /** Text sign texture. */
+/** Sign face. Size the canvas to the sign's aspect (see `signCanvas`) so lettering is not stretched; long text shrinks to fit. */
 export function signTexture(text: string, bg: string, fg: string, w = 512, h = 128): Texture {
-  return make(`sign:${text}:${bg}:${fg}`, [w, h], 1, 1, (g) => {
+  return make(`sign:${text}:${bg}:${fg}:${w}x${h}`, [w, h], 1, 1, (g) => {
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
     g.fillStyle = fg;
-    g.font = `bold ${Math.floor(h * 0.55)}px "Segoe UI", Arial, sans-serif`;
+    const font = (px: number) => `bold ${px}px "Segoe UI", Arial, sans-serif`;
+    let px = Math.floor(h * 0.55);
+    g.font = font(px);
+    const width = g.measureText(text).width, room = w * 0.9;
+    if (width > room) { px = Math.max(8, Math.floor(px * room / width)); g.font = font(px); }
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(text, w / 2, h / 2 + 2);
   }).tex;
+}
+
+/** Canvas size (px) for a sign plane of `w` × `h` metres: 512 px wide, height from the aspect. */
+export function signCanvas(w: number, h: number): [number, number] {
+  return [512, Math.max(32, Math.min(1024, Math.round(512 * h / w)))];
 }
 
 /** Soft round sprite for smoke / particles. */

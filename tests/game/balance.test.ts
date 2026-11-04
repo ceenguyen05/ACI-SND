@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Match } from '../../src/sim/mode/Match';
-import { ACI_HQ } from '../../src/sim/maps/aciHq';
+import { sndMap } from '../../src/sim/maps/index';
 import { OUTFITS } from '../../src/config/cosmetics';
 import type { BotDifficulty } from '../../src/config/difficulty';
 
 /**
  * Long-running balance report (skipped by default). Run with:
- *   BALANCE=1 npx vitest run tests/balance.test.ts
+ *   BALANCE=1 npx vitest run tests/game/balance.test.ts          (ACI HQ)
+ *   BALANCE=1 MAP=aci_b2 npx vitest run tests/game/balance.test.ts
  */
 describe.skipIf(!process.env.BALANCE)('balance report', () => {
   it('simulates many rounds and reports win rates', () => {
@@ -17,7 +18,7 @@ describe.skipIf(!process.env.BALANCE)('balance report', () => {
     const weaponKills: Record<string, number> = {};
     const fights: Record<string, number> = {};
     for (let seed = 1; seed <= Number(process.env.SEEDS ?? 6); seed++) {
-      const m = new Match({ map: ACI_HQ, difficulty: diff, playerTeam: 'spectator', playerName: 'x', playerLook: look, seed,
+      const m = new Match({ map: sndMap(process.env.MAP), difficulty: diff, playerTeam: 'spectator', playerName: 'x', playerLook: look, seed,
         rules: { roundsToWin: 7, halfLength: 6, freezeTime: 2, roundEndDelay: 1 } });
       m.events.on('bombPlanted', () => plants++);
       m.events.on('throw', () => throws++);

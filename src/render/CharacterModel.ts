@@ -2,7 +2,7 @@ import { CapsuleGeometry, CircleGeometry, Color, Group, LatheGeometry, Mesh, Mes
 import { batchModel, bevelBox, releaseModel } from './Geometry';
 import { contactShadow, surfaceDetail, TEX } from './Textures';
 import { garment, legPose } from './HumanoidGeometry';
-import { damp } from '../core/math';
+import { MovementCycle } from './MovementMotion';
 import type { AgentLook } from '../config/cosmetics';
 import type { WeaponId } from '../config/weapons';
 import type { UtilityId } from '../config/utilities';
@@ -99,7 +99,7 @@ export class CharacterModel {
   private hand = new Group();
   private held: Group | null = null;
   private heldKey = '';
-  private phase = Math.random() * 6;
+  private gait = new MovementCycle();
   private lookKey = '';
   private move = 0;
   private idle = Math.random() * 6;
@@ -108,6 +108,7 @@ export class CharacterModel {
   private tint = new Color(1, 1, 1);
 
   constructor(look: AgentLook) {
+    this.gait.phase = Math.random() * Math.PI * 2;
     this.root.add(this.hips);
     this.hips.position.y = 0.95;
     this.hips.add(this.torso, this.legL, this.legR);
@@ -309,29 +310,36 @@ export class CharacterModel {
     this.hips.position.x = 0;
     this.torso.rotation.y = 0; this.head.rotation.y = 0; this.armR.rotation.y = 0; this.armL.rotation.y = 0;
     (this.root.getObjectByName('blob') as Mesh).visible = true;
-    const run = Math.min(1, p.speed / Math.max(1, p.maxSpeed));
-    this.move = damp(this.move, run, 12, dt);
+    this.gait.update({ speed: p.speed, forward: p.forward ?? p.speed, right: p.right ?? 0,
+      onGround: p.onGround, crouch: p.crouch, slide, prone }, dt);
+    const run = Math.min(1, this.gait.speed / Math.max(1, p.maxSpeed));
+    this.move = run * this.gait.grounded;
     this.idle += dt;
-    if (p.onGround) this.phase += dt * p.speed * Math.PI * 2 / (1.4 + run * 1.15);
     const cr = p.crouch;
-    const standingHip = 0.9 - 0.4 * cr - this.move * 0.09 + Math.cos(this.phase * 2) * 0.012 * this.move;
+    const standingHip = 0.9 - 0.4 * cr - this.move * 0.12 + Math.cos(this.gait.phase * 2) * 0.012 * this.move;
     this.hips.position.y = standingHip + (0.18 - standingHip) * slide;
     this.hips.position.z = 0;
     // Planted stance + lifted recovery, solved back to the knees. Local velocity
     // makes strafe and backpedal steps travel in the actual direction of movement.
-    const forward = (p.forward ?? p.speed) / Math.max(0.01, p.speed);
-    const right = (p.right ?? 0) / Math.max(0.01, p.speed);
+    const forward = this.gait.forward;
+    const right = this.gait.right;
     for (const [leg, shin, foot, offset] of [[this.legL, this.shinL, this.footL, 0], [this.legR, this.shinR, this.footR, 0.5]] as const) {
-      const cycle = (this.phase / (Math.PI * 2) + offset) % 1;
-      const swing = Math.max(0, (cycle - 0.6) / 0.4);
-      const travel = (cycle < 0.6 ? 0.5 - cycle / 0.6 : -0.5 + swing * swing * (3 - 2 * swing)) * this.move * (0.55 + run * 0.25);
-      const lift = Math.sin(swing * Math.PI) * this.move * (0.1 + run * 0.13);
+      const { travel, lift } = this.gait.foot(offset);
       // slide: lead leg stretched out in front, trailing leg folded underneath (baseball slide)
       const lead = offset === 0;
       const slideFoot = lead ? -0.78 : 0.06;
       const slideDrop = lead ? 0.09 : 0.14;
-      const pose = legPose(right * travel * (1 - slide) + (lead ? 0 : 0.07) * slide, -this.hips.position.y + 0.09 + (p.onGround ? lift * (1 - slide) : 0.13) - slideDrop * slide,
-        (0.025 + cr * 0.08 - forward * travel) * (1 - slide) + slideFoot * slide);
+      // Side-step with a leading / trailing foot rather than crossing both ankles
+      // through the same point. Hip pivots sit 0.13 m either side of the centre.
+      const sideStep = lead ? Math.min(0.08, right * travel) : Math.max(-0.08, right * travel);
+      const footX = sideStep * (1 - slide) + (lead ? 0 : 0.07) * slide;
+      const footY = -this.hips.position.y + 0.09 + lift * (1 - slide) + 0.13 * (1 - this.gait.grounded) - slideDrop * slide;
+      const footZ = (0.025 + cr * 0.08 - forward * travel) * (1 - slide) + slideFoot * slide;
+      // Shorten an overextended stride horizontally, keeping the sole on the floor.
+      // Clamping the IK distance alone would lift the planted foot instead.
+      const reach = Math.sqrt(Math.max(0, 0.855 ** 2 - footY ** 2));
+      const reachScale = Math.min(1, reach / Math.max(0.001, Math.hypot(footX, footZ)));
+      const pose = legPose(footX * reachScale, footY, footZ * reachScale);
       leg.rotation.set(pose.hip, 0, pose.roll, 'ZXY'); shin.rotation.x = pose.knee;
       foot.rotation.set(pose.ankle, 0, -pose.roll, 'XYZ');
     }
@@ -365,7 +373,7 @@ export class CharacterModel {
     this.armR.rotation.y -= slide * 0.22; this.armL.rotation.y -= slide * 0.22;
     this.head.rotation.x += slide * 0.35;
     if (prone > 0) {
-      const crawl = Math.sin(this.phase) * Math.min(1, p.speed / 1.1);
+      const crawl = Math.sin(this.gait.phase) * Math.min(1, p.speed / 1.1);
       this.hips.position.y += (0.18 - this.hips.position.y) * prone;
       this.hips.rotation.x = -Math.PI / 2 * prone;
       const torsoPitch = 0.08 + Math.max(-0.12, Math.min(0.18, p.pitch * 0.15));

@@ -3,22 +3,9 @@ import type { Batcher } from './Materials';
 import type { MapAnimator } from './MapAnimation';
 import { Random } from '../core/Random';
 import { SPEED_TRAILER, cubicleLayout } from '../sim/world/PropShapes';
-import { CylinderGeometry, Matrix4, Quaternion, Vector3 } from 'three';
-
-/** `turn` rotates the box about Y on top of the prop's own facing (quarter turns or any angle). */
-type BoxFn = (mat: string, lx: number, ly: number, lz: number, w: number, h: number, d: number, turn?: number) => void;
-type CylFn = (mat: string, lx: number, ly: number, lz: number, r: number, h: number, seg?: number) => void;
-/** `box` bevels its edges; `plain` is a sharp box for small parts repeated by the hundred (12 triangles, not ~108). */
-interface Prims { box: BoxFn; plain: BoxFn; cyl: CylFn; axle: CylFn }
-interface Ctx extends Prims {
-  W: number; D: number; H: number; r: Random; b: Batcher; p: PropDef;
-  /** Prop rotation about Y; `world` maps prop-local points with it. */
-  rot: number;
-  world(lx: number, ly: number, lz: number): [number, number, number];
-  /** The same primitives drawing into another batcher (geometry for animated parts). */
-  into(target: Batcher): Prims;
-  anim: MapAnimator;
-}
+import { CylinderGeometry, Matrix4, Quaternion, SphereGeometry, Vector3 } from 'three';
+import { type Ctx, type Prims, faceTo, lidarGun, monitor, officeChair, cafeChair, radarGun, sportsRadarGun, turned } from './propKit';
+import { OFFICE_BUILDERS } from './OfficeProps';
 
 /** Materials painted as a single panel (or with no texture) keep plain box UVs. */
 const FLAT = ['crate', 'cardboard', 'hazard', 'glass', 'screen'];
@@ -44,6 +31,7 @@ export function buildProp(b: Batcher, p: PropDef, seed: number, anim: MapAnimato
     axle: (mat, lx, ly, lz, radius, length, segments = 20) => {
       t.addGeometry(mat, new CylinderGeometry(radius, radius, length, segments), wx(lx, lz), y0 + ly + radius, wz(lx, lz), rot, 0, Math.PI / 2);
     },
+    geo: (mat, geometry, lx, ly, lz, turn = 0) => t.addGeometry(mat, geometry, wx(lx, lz), y0 + ly, wz(lx, lz), rot + turn),
   });
   const ctx: Ctx = {
     W, D, H: p.h, ...into(b), r: new Random(seed), b, p, rot, into, anim,
@@ -52,70 +40,10 @@ export function buildProp(b: Batcher, p: PropDef, seed: number, anim: MapAnimato
   (BUILDERS[p.kind] ?? fallback)(ctx);
 }
 
+/** True if `kind` has a dedicated builder (used by the placement sweep test). */
+export const hasBuilder = (kind: PropDef['kind']) => !!BUILDERS[kind];
+
 const fallback = ({ W, D, H, box }: Ctx) => box('p:#888888', 0, 0, 0, W, H, D);
-
-/** Heading (for `turned` / chairs) whose front, local -Z, points along (dx, dz). */
-const faceTo = (dx: number, dz: number) => Math.atan2(-dx, -dz);
-
-/** Box placer in a sub-frame at (x, z) turned by `face`: u across, v toward the back. */
-function turned(box: BoxFn, x: number, z: number, face: number): BoxFn {
-  const co = Math.cos(face), si = Math.sin(face);
-  return (mat, u, y, v, w, h, d, turn = 0) => box(mat, x + u * co + v * si, y, z - u * si + v * co, w, h, d, face + turn);
-}
-
-function monitor(box: BoxFn, x: number, y: number, z: number, faceZ: 1 | -1) {
-  box('rubber', x, y, z, 0.18, 0.02, 0.15);
-  box('rubber', x, y, z, 0.04, 0.22, 0.04);
-  box('rubber', x, y + 0.18, z, 0.52, 0.32, 0.04);
-  box('screen', x, y + 0.2, z + faceZ * 0.022, 0.48, 0.28, 0.005);
-}
-
-/** Swivel task chair: five-star base on casters, gas lift, seat, backrest and arms. Faces `face` (see faceTo). */
-function officeChair({ box, plain, cyl }: Prims, x: number, z: number, face: number) {
-  const part = turned(box, x, z, face), caster = turned(plain, x, z, face);
-  const frame = 'p:#2b2d31';
-  for (let k = 0; k < 5; k++) {
-    const a = k * Math.PI * 2 / 5 + 0.3, su = Math.sin(a), sv = Math.cos(a);
-    part(frame, su * 0.15, 0.045, sv * 0.15, 0.045, 0.035, 0.3, a);
-    caster('rubber', su * 0.29, 0, sv * 0.29, 0.04, 0.05, 0.06, a);
-  }
-  cyl('chrome', x, 0.08, z, 0.024, 0.3, 8);
-  part(frame, 0, 0.37, 0, 0.34, 0.04, 0.32);
-  part('fabric', 0, 0.41, -0.02, 0.5, 0.08, 0.48);
-  part(frame, 0, 0.4, 0.245, 0.06, 0.22, 0.035);
-  part('fabric', 0, 0.58, 0.27, 0.47, 0.52, 0.07);
-  for (const s of [-1, 1]) {
-    part(frame, s * 0.24, 0.45, 0.03, 0.03, 0.19, 0.035);
-    part('rubber', s * 0.24, 0.64, 0.01, 0.06, 0.03, 0.26);
-  }
-}
-
-/** Four-leg stacking chair for the break room. */
-function cafeChair({ box }: Prims, x: number, z: number, face: number, color: string) {
-  const part = turned(box, x, z, face);
-  for (const [u, v] of [[-0.19, -0.18], [0.19, -0.18], [-0.19, 0.18], [0.19, 0.18]]) part('m:#3a3e44', u, 0, v, 0.03, 0.45, 0.03);
-  part(color, 0, 0.45, 0, 0.44, 0.04, 0.42);
-  for (const s of [-1, 1]) part('m:#3a3e44', s * 0.19, 0.49, 0.19, 0.025, 0.36, 0.025);
-  part(color, 0, 0.66, 0.2, 0.42, 0.2, 0.03);
-}
-
-/** Handheld traffic radar: antenna barrel along local X pointing `dir`, body with rear display, pistol grip. */
-function radarGun({ box, axle }: Prims, x: number, y: number, z: number, dir: 1 | -1 = 1) {
-  box('rubber', x - dir * 0.05, y, z, 0.045, 0.12, 0.04);
-  box('p:#2c3036', x - dir * 0.01, y + 0.1, z, 0.17, 0.1, 0.085);
-  axle('p:#3a3f46', x + dir * 0.13, y + 0.09, z, 0.058, 0.13, 10);
-  axle('rubber', x + dir * 0.2, y + 0.1, z, 0.05, 0.012, 10);
-  box('screen', x - dir * 0.098, y + 0.12, z, 0.006, 0.05, 0.07);
-}
-
-/** Handheld lidar: twin lenses, sighting scope and grip. */
-function lidarGun({ box, axle }: Prims, x: number, y: number, z: number) {
-  box('rubber', x - 0.05, y, z, 0.045, 0.12, 0.04);
-  box('p:#34383d', x, y + 0.1, z, 0.22, 0.12, 0.1);
-  for (const s of [-1, 1]) axle('rubber', x + 0.115, y + 0.14, z + s * 0.025, 0.02, 0.02, 12);
-  box('rubber', x - 0.02, y + 0.22, z, 0.12, 0.04, 0.04);
-  box('screen', x - 0.111, y + 0.13, z, 0.006, 0.06, 0.07);
-}
 
 const _v = new Vector3(), _sc = new Vector3(), _q = new Quaternion();
 
@@ -740,6 +668,26 @@ const BUILDERS: Partial<Record<PropDef['kind'], (c: Ctx) => void>> = {
       box('chrome', s * (W / 2 - 0.01), 0.93, -D / 2 + 0.01, 0.02, H - 1.03, 0.02);
     }
     for (const y of [1.33, 1.68]) box('glass', 0, y, 0, W - 0.06, 0.012, D - 0.08);
+    if (c.p.variant === 'sports') {
+      // Sports radar line-up: pitch-speed guns on stands, a scoreboard-style display unit, balls.
+      const k = W / 2.4;
+      for (const x of [-0.75 * k, 0, 0.75 * k]) {
+        box('rubber', x, 0.93, 0, 0.22, 0.02, 0.15);
+        sportsRadarGun(c, x, 0.95, 0, x <= 0 ? 1 : -1, x === 0 ? 'p:#b3262d' : 'p:#1d4f9a');
+      }
+      for (const x of [-0.45 * k, 0.45 * k]) sportsRadarGun(c, x, 1.342, 0, x < 0 ? 1 : -1, 'p:#2a2d32');
+      // remote speed display: amber LED panel on a small stand
+      box('p:#1b1d21', 0, 1.342, 0.05, 0.42, 0.24, 0.06);
+      box('e:#ffb21e', 0, 1.39, 0.017, 0.3, 0.13, 0.004);
+      for (let i = 0; i < 4; i++) {
+        const x = (-0.75 + i * 0.5) * k;
+        if (i === 1) { c.geo('p:#d9d2a0', new SphereGeometry(0.033, 10, 8), x, 1.725, 0); continue; } // tennis ball
+        box('rubber', x, 1.692, 0, 0.1, 0.012, 0.1);
+        c.geo('p:#f2efe6', new SphereGeometry(0.037, 10, 8), x, 1.741, 0);
+        box('p:#c0392b', x, 1.739, -0.037, 0.05, 0.004, 0.002); // red stitching hint
+      }
+      return;
+    }
     for (const [x, kind] of [[-0.75, 0], [0, 1], [0.75, 0]] as const) {
       box('rubber', x, 0.93, 0, 0.24, 0.02, 0.16);
       if (kind === 0) radarGun(c, x, 0.95, 0); else lidarGun(c, x, 0.95, 0);
@@ -778,6 +726,7 @@ const BUILDERS: Partial<Record<PropDef['kind'], (c: Ctx) => void>> = {
     const speed = r.range(1.4, 1.9), phase = r.range(0, 6);
     anim.onFrame((t) => { rotor.rotation.y = -(t * speed + phase); });
   },
+  ...OFFICE_BUILDERS,
 };
 
 /** Car body shared by the yard sedans and the patrol car. `roof` defaults to the body colour. */

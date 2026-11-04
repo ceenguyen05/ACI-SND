@@ -8,7 +8,9 @@
 The game copies CS:GO / CS2 competitive bomb defusal.
 
 1. **Freeze time** (5–15 s, configurable). Everyone is frozen in spawn and can buy.
-2. **Buy time.** You can buy during freeze time and for the first 20 s of the round, inside your team's spawn buy zone.
+2. **Buy time.** You can buy during freeze time and for the first 20 s of the round, inside your team's spawn area for that round.
+   Spawns change every round: Attackers start in one of three areas (never the same twice in a row), and Defenders are split
+   between the A and B sites. Everyone gets a new spot, nudged at random. Details are in [MAP.md](MAP.md#spawns).
 3. **Round** (1:55):
    * **Attackers** carry the bomb. They win by planting it at **A** or **B** and letting it explode (40 s), or by eliminating all Defenders.
    * **Defenders** win by eliminating all Attackers before a plant, by defusing (10 s, 5 s with a kit), or when time runs out.

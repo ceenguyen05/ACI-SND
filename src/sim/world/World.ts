@@ -1,8 +1,7 @@
 import { CollisionWorld, type Box, type SurfaceKind } from '../physics/CollisionWorld';
 import { NavGrid } from '../ai/NavGrid';
 import { inRect } from '../../core/math';
-import type { Team } from '../../config/rules';
-import type { FloorType, MapDef, PropDef, PropKind, SiteId } from './MapTypes';
+import type { DoorDef, FloorType, MapDef, PropDef, PropKind, SiteId } from './MapTypes';
 import { compoundShape } from './PropShapes';
 
 export interface WallBlock { c0: number; r0: number; c1: number; r1: number; height: number; material: FloorType['wallMaterial'] }
@@ -11,6 +10,9 @@ export interface CeilingBlock { c0: number; r0: number; c1: number; r1: number; 
 const PROP_SURFACE: Partial<Record<PropKind, SurfaceKind>> = {
   cubicle: 'fabric', sofa: 'fabric', confTable: 'wood', table: 'wood', reception: 'wood', counter: 'wood', kitchenette: 'wood',
   crate: 'wood', pallet: 'wood', packTable: 'wood', bench: 'wood', display: 'wood', pillar: 'concrete', barrier: 'concrete', partition: 'wall',
+  booth: 'fabric', armchair: 'fabric', highTop: 'wood', coffeeBar: 'wood', pingPong: 'wood', foosball: 'wood', arcade: 'wood',
+  execDesk: 'wood', bookcase: 'wood', podium: 'wood', classTable: 'wood', coffeeTable: 'wood', credenza: 'wood', tree: 'wood',
+  monument: 'concrete', phoneBooth: 'glass',
 };
 
 /** Runtime world: geometry queries derived from a MapDef. Shared by simulation and renderer. */
@@ -45,13 +47,14 @@ export class World {
         minY: c.height, maxY: c.height + 0.5, surface: 'ceiling',
       });
     }
-    // door lintels
+    // door lintels: the wall above an opening, up to the wall it was cut from
     for (const d of map.doors) {
       const ceil = this.ceilingAtCell(d.c0, d.r0);
-      if (ceil === null || ceil <= d.lintel + 0.05) continue;
+      const head = this.doorHead(d);
+      if (ceil === null || head <= d.lintel + 0.05) continue;
       this.collision.add({
         minX: ox + d.c0 * cs, minZ: oz + d.r0 * cs, maxX: ox + (d.c1 + 1) * cs, maxZ: oz + (d.r1 + 1) * cs,
-        minY: d.lintel, maxY: ceil, surface: 'wall',
+        minY: d.lintel, maxY: head, surface: 'wall',
       });
     }
     // props
@@ -84,17 +87,46 @@ export class World {
     return !!f && f.ceiling === null;
   }
 
+  /**
+   * Height of the wall above a doorway: the taller of the door cell's own ceiling and the walls
+   * flanking the opening. A door from a 3.4 m corridor into a 6 m lobby (or out through a 6 m
+   * façade) is filled up to 6 m, so there is no hole above the lintel.
+   */
+  doorHead(d: DoorDef): number {
+    let head = this.ceilingAtCell(d.c0, d.r0) ?? 0;
+    for (let r = d.r0; r <= d.r1; r++) for (let c = d.c0; c <= d.c1; c++) {
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const h = this.wallHeightAt(c + dc, r + dr);
+        if (h !== null) head = Math.max(head, h);
+      }
+    }
+    return head;
+  }
+  private wallHeights: Map<number, number> | null = null;
+  /** Height of the wall block covering cell (c, r), or null for a floor cell. */
+  wallHeightAt(c: number, r: number): number | null {
+    if (this.charAt(c, r) !== '#' || r < 0 || r >= this.map.rows || c < 0 || c >= this.map.cols) return null;
+    if (!this.wallHeights) {
+      this.wallHeights = new Map();
+      for (const w of this.walls) for (let rr = w.r0; rr <= w.r1; rr++) for (let cc = w.c0; cc <= w.c1; cc++) this.wallHeights.set(rr * this.map.cols + cc, w.height);
+    }
+    return this.wallHeights.get(r * this.map.cols + c) ?? null;
+  }
+
+  /** Callout for a position. Doorways (between two named rects) borrow the nearest room's name. */
   calloutAt(x: number, z: number): string {
     for (const c of this.map.callouts) if (inRect(c.rect, x, z)) return c.name;
+    const pad = this.map.cellSize * 0.55;
+    for (const c of this.map.callouts) {
+      const r = c.rect;
+      if (x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad) return c.name;
+    }
     return '';
   }
   siteAt(x: number, z: number): SiteId | null {
     if (inRect(this.map.sites.A, x, z)) return 'A';
     if (inRect(this.map.sites.B, x, z)) return 'B';
     return null;
-  }
-  inBuyZone(team: Team, x: number, z: number): boolean {
-    return inRect(this.map.buyZones[team], x, z);
   }
 }
 

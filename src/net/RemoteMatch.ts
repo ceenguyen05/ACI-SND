@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { Match } from '../sim/mode/Match';
-import { ACI_HQ } from '../sim/maps/aciHq';
+import { sndMap } from '../sim/maps/index';
 import type { Agent, AgentCommand } from '../sim/entities/Agent';
 import { moveAgent } from '../sim/physics/AgentMovement';
 import { purchaseBlocker, type BuyItem } from '../sim/mode/Economy';
@@ -68,7 +68,7 @@ export class RemoteMatch extends Match {
   readonly remote = true;
   private replica: ReplicaDriver;
   constructor(readonly client: OnlineClient, start: MatchStart) {
-    super({ ...start.config, map: ACI_HQ, localPlayerId: start.playerId });
+    super({ ...start.config, map: sndMap(start.mapId), localPlayerId: start.playerId });
     this.bots.clear(); this.replica = new ReplicaDriver(this, client, start);
   }
   receiveSnapshot() { this.replica.receiveSnapshot(); }

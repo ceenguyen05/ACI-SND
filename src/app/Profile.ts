@@ -5,6 +5,7 @@ import type { MatchLength, Team } from '../config/rules';
 import type { WeaponId } from '../config/weapons';
 import type { ZDifficulty, ZLength } from '../config/zombies';
 import { newCareer, restoreCareer, type Career } from '../progression/career';
+import { isMapChoice, type SndMapChoice } from '../sim/maps/index';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type AimAssist = 'off' | 'low' | 'medium' | 'high';
@@ -53,6 +54,8 @@ export interface MatchPrefs {
   freezeTime: number;
   friendlyFire: boolean;
   killstreaks: boolean;
+  /** Search & Destroy map: a specific map or 'random'. */
+  map: SndMapChoice;
 }
 
 /** Zombies setup remembered between games. */
@@ -94,7 +97,7 @@ export function defaultProfile(): Profile {
     },
     finishes: {},
     stats: { matches: 0, wins: 0, kills: 0, deaths: 0, mvps: 0 },
-    match: { side: 'auto', teamSize: 5, difficulty: 'normal', length: 'short', freezeTime: 10, friendlyFire: false, killstreaks: true },
+    match: { side: 'auto', teamSize: 5, difficulty: 'normal', length: 'short', freezeTime: 10, friendlyFire: false, killstreaks: true, map: 'random' },
     zombies: { players: 3, difficulty: 'normal', length: 'short' },
     zstats: { games: 0, kills: 0, headshots: 0, downs: 0, revives: 0, exfils: 0, best: {} },
     settings: structuredClone(DEFAULT_SETTINGS),
@@ -114,7 +117,7 @@ export function loadProfile(): Profile {
       career: restoreCareer(p.career), onlineCareer: p.onlineCareer ? restoreCareer(p.onlineCareer) : null,
       looks: { T: { ...base.looks.T, ...p.looks?.T }, CT: { ...base.looks.CT, ...p.looks?.CT } },
       stats: { ...base.stats, ...p.stats },
-      match: { ...base.match, ...p.match },
+      match: { ...base.match, ...p.match, map: isMapChoice(p.match?.map) ? p.match!.map : base.match.map },
       zombies: { ...base.zombies, ...p.zombies },
       zstats: { ...base.zstats, ...p.zstats, best: { ...base.zstats.best, ...p.zstats?.best } },
       settings: {

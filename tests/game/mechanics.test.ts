@@ -5,6 +5,7 @@ import { createMotorState, stepMotor, type MoveInput } from '../../src/sim/physi
 import { MOVE } from '../../src/config/movement';
 import { Match } from '../../src/sim/mode/Match';
 import { ACI_HQ } from '../../src/sim/maps/aciHq';
+import { SND_MAPS } from '../../src/sim/maps/index';
 import { OUTFITS } from '../../src/config/cosmetics';
 import { WEAPONS } from '../../src/config/weapons';
 import { fireGun } from '../../src/sim/combat/Ballistics';
@@ -127,9 +128,9 @@ describe('baked lighting', () => {
     expect(a.walls.map((r) => [r.px, r.py])).toEqual(b.walls.map((r) => [r.px, r.py]));
   });
 
-  it('shipped lightmaps match the current map (run `npm run bake` after editing the map)', () => {
-    const meta = JSON.parse(readFileSync('public/lightmaps/aci_hq.json', 'utf8'));
-    const world = new World(ACI_HQ);
+  it.each(Object.values(SND_MAPS).map((m) => [m.id, m] as const))('shipped lightmaps match the current %s map (run `npm run bake` after editing a map)', (id, map) => {
+    const meta = JSON.parse(readFileSync(`public/lightmaps/${id}.json`, 'utf8'));
+    const world = new World(map);
     expect(meta.hash).toBe(lightingHash(world));
     const layout = buildLayout(world);
     expect([meta.atlas.width, meta.atlas.height]).toEqual([layout.width, layout.height]);

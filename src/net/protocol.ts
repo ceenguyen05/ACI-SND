@@ -12,10 +12,16 @@ import type { MatchSnapshot, WireEvent } from './snapshot';
 import type { ZombiesConfig } from '../sim/zombies/ZombiesMatch';
 import type { ZDifficulty, ZLength, ArmoryId } from '../config/zombies';
 import type { Award, Career } from '../progression/career';
+import { isMapChoice, type SndMapChoice, type SndMapId } from '../sim/maps/index';
 
-export const PROTOCOL_VERSION = 2;
+/** 3: Search & Destroy map choice (RoomOptions.map) and the resolved map in MatchStart.mapId. */
+export const PROTOCOL_VERSION = 3;
 export const QUEUE_WAIT_MS = 180_000;
-export interface RoomOptions { teamSize: number; length: MatchLength; mode?: 'snd' | 'zombies'; playlist?: 'casual' | 'ranked'; zDifficulty?: ZDifficulty; zLength?: ZLength }
+export interface RoomOptions {
+  teamSize: number; length: MatchLength; mode?: 'snd' | 'zombies'; playlist?: 'casual' | 'ranked'; zDifficulty?: ZDifficulty; zLength?: ZLength;
+  /** S&D map choice. Public rooms narrow "random" to the first specific choice that joins; it is rolled at match start. */
+  map?: SndMapChoice;
+}
 export const roomCapacity = (o: RoomOptions) => o.teamSize * (o.mode === 'zombies' ? 1 : 2);
 export interface LobbyPlayer { id: string; name: string; team: Team; level?: number; rank?: string }
 export interface LobbyState {
@@ -37,6 +43,8 @@ export interface MatchStart {
   zombiesConfig?: Omit<ZombiesConfig, 'layout'>;
   ranked?: boolean;
   matchId?: string;
+  /** The S&D map the server rolled (absent for Zombies: ACI HQ). */
+  mapId?: SndMapId;
 }
 export type ClientMessage =
   | { type: 'queue'; name: string; options: RoomOptions }
@@ -66,7 +74,9 @@ export function roomOptions(value: unknown): RoomOptions | null {
   if (o.zDifficulty !== undefined && !['casual', 'normal', 'hardened', 'nightmare'].includes(o.zDifficulty)) return null;
   if (o.zLength !== undefined && !['short', 'long', 'endless'].includes(o.zLength)) return null;
   if (o.mode === 'zombies' && o.playlist === 'ranked') return null;
-  return { teamSize: o.teamSize!, length: o.length!, mode: o.mode ?? 'snd', playlist: o.playlist ?? 'casual', zDifficulty: o.zDifficulty ?? 'normal', zLength: o.zLength ?? 'short' };
+  if (o.map !== undefined && !isMapChoice(o.map)) return null;
+  return { teamSize: o.teamSize!, length: o.length!, mode: o.mode ?? 'snd', playlist: o.playlist ?? 'casual', zDifficulty: o.zDifficulty ?? 'normal', zLength: o.zLength ?? 'short',
+    map: o.mode === 'zombies' ? 'aci_hq' : o.map ?? 'random' };
 }
 export const playerName = (v: unknown) => typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 16) || 'Player' : 'Player';
 

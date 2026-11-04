@@ -15,6 +15,7 @@ import type { Match } from '../sim/mode/Match';
 import { VIEW_PUNCH_FRACTION } from '../sim/combat/recoil';
 import { sfx } from '../audio/Sfx';
 import { CharacterModel } from './CharacterModel';
+import { LandingSpring, StairMotion } from './MovementMotion';
 import { ZombieModel } from './ZombieModel';
 import type { GameRenderer } from './Renderer';
 import { bombModel, grenadeModel, weaponModel } from './WeaponModels';
@@ -58,8 +59,8 @@ export class MatchView {
   private deathCamYaw: number | null = null;
   private deathCamPitch = 0;
   private vmLight = new Color(1, 1, 1);
-  private landDip = 0;
-  private stepOffset = 0;
+  private landing = new LandingSpring();
+  private stairs = new StairMotion(MOVE.stepHeight);
   private prevFeetY = 0;
   private prevGround = false;
   private punchPitch = 0;
@@ -209,7 +210,7 @@ export class MatchView {
       if (isView(e.agentId)) sfx.footstep(e.surface, null, 0.45);
       else sfx.footstep(e.surface, e.pos.clone().setY(e.pos.y + 0.1));
     });
-    on('land', (e) => { if (isView(e.agentId)) { this.landDip = e.hard ? 0.12 : 0.05; this.r.viewModel.onLand(); sfx.land(null); } else sfx.land(e.pos); });
+    on('land', (e) => { if (isView(e.agentId)) { this.landing.kick(e.hard ? 2 : 1); this.r.viewModel.onLand(e.hard); sfx.land(null); } else sfx.land(e.pos); });
     on('slide', (e) => sfx.slide(isView(e.agentId) ? null : e.pos));
     on('prone', (e) => sfx.prone(isView(e.agentId) ? null : e.pos, e.down));
     on('reload', (e) => {
@@ -482,7 +483,7 @@ export class MatchView {
       dt, speed: f.speed, maxSpeed: f.maxSpeed, onGround: f.onGround, crouch: f.duck, lookDX: 0, lookDY: 0,
       prone: f.prone, slidePose: f.slide,
       ads: f.ads, scoped: f.scoped, reload: f.reload, draw: 1, planting: f.planting, defusing: false, throwPrimed: false,
-      lateralSpeed: f.right, verticalSpeed: f.vy, busy: true,
+      lateralSpeed: f.right, forwardSpeed: f.fwd, verticalSpeed: f.vy, busy: true,
     });
     void yaw;
   }
@@ -608,10 +609,10 @@ export class MatchView {
       a.eyePos(this.curEye);
       const rise = a.pos.y - this.prevFeetY;
       if (this.prevGround && a.motor.onGround && Math.abs(rise) > 0.02 && Math.abs(rise) <= MOVE.stepHeight + 0.01) {
-        this.stepOffset = clamp(this.stepOffset - rise, -MOVE.stepHeight, MOVE.stepHeight);
-      }
+        this.stairs.step(rise);
+      } else this.stairs.step();
       if (this.prevEye.distanceToSquared(this.curEye) > 4) {
-        this.prevEye.copy(this.curEye); this.stepOffset = 0;
+        this.prevEye.copy(this.curEye); this.stairs.reset();
       }
     }
   }
@@ -932,8 +933,8 @@ export class MatchView {
     const s = this.settings();
     const a = this.viewAgent;
     this.shake = damp(this.shake, 0, 5, dt);
-    this.landDip = damp(this.landDip, 0, 9, dt);
-    this.stepOffset = damp(this.stepOffset, 0, 18, dt);
+    const landDip = this.landing.update(dt) * 2.5;
+    const stepOffset = this.stairs.update(dt, this.stepAlpha);
     this.aimNdc.set(0, 0);
     const baseV = verticalFov(s.fov);
     if (this.freeCam || !a) {
@@ -982,7 +983,7 @@ export class MatchView {
     const eye = new Vector3().lerpVectors(this.prevEye, this.curEye, this.stepAlpha);
     if (isLocal) {
       // use the live (unsmoothed) lean so the camera responds immediately
-      eye.y += this.stepOffset - this.landDip;
+      eye.y += stepOffset - landDip;
     }
     const yaw = isLocal ? look.yaw : a.yaw;
     const pitch = isLocal ? look.pitch : a.pitch;
@@ -1043,6 +1044,7 @@ export class MatchView {
       ads: a.wpn.ads, scoped: scopedView(w?.def, a.wpn.ads, a.wpn.scope), reload: reloadP, draw: clamp(drawP, 0, 1),
       planting: a.isPlanting, defusing: a.isDefusing, throwPrimed: a.wpn.throwPrimed > 0,
       lateralSpeed: a.vel.x * Math.cos(yaw) - a.vel.z * Math.sin(yaw), verticalSpeed: a.vel.y,
+      forwardSpeed: -a.vel.x * Math.sin(yaw) - a.vel.z * Math.cos(yaw),
       mantle, stun, busy: a.wpn.ads || reloadP > 0 || now - a.wpn.lastShot < 0.3 || drawP < 1,
     });
     this.r.showViewModel = a.alive;

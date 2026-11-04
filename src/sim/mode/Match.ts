@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { EventBus } from '../../core/EventBus';
 import { Random } from '../../core/Random';
-import { DEG, clamp, approach } from '../../core/math';
+import { DEG, clamp, approach, inRect } from '../../core/math';
 import { MOVE } from '../../config/movement';
 import { DEFAULT_RULES, otherTeam, type MatchRules, type Team } from '../../config/rules';
 import { ECONOMY } from '../../config/economy';
@@ -12,7 +12,7 @@ import { Agent, emptyCommand, makeWeapon, refitWeapon, type AgentCommand, type H
 import { stepMotor } from '../physics/CharacterMotor';
 import { moveAgent } from '../physics/AgentMovement';
 import { World } from '../world/World';
-import type { MapDef } from '../world/MapTypes';
+import type { MapDef, SpawnArea, Spot } from '../world/MapTypes';
 import type { SimEvents, RoundEndReason } from '../events';
 import type { DamageFlags, NoiseKind, SimContext } from '../SimContext';
 import type { DamageResult } from '../combat/damage';
@@ -83,6 +83,8 @@ export class Match implements SimContext, MatchQuery {
   matchOver = false;
   bomb: BombState = { state: 'none', carrierId: null, pos: new Vector3(), vel: new Vector3(), site: null, plantedAt: 0, plantedBy: null, defuserId: null, nextBeep: 0, spottedByCT: -10 };
   lastRoundEnd: { winner: Team; reason: RoundEndReason; mvpId: number | null } | null = null;
+  /** Spawn areas in use this round (ids into map.spawnAreas); their zones are the buy zones. Replicated. */
+  spawnAreas: Record<Team, string[]> = { T: [], CT: [] };
 
   protected playerCmd: AgentCommand = emptyCommand();
   protected humanCommands = new Map<number, AgentCommand>();
@@ -90,6 +92,9 @@ export class Match implements SimContext, MatchQuery {
   protected losCache = new Map<number, boolean>();
   private nextItemId = 1;
   private plantedThisRound = false;
+  /** The Attackers' area last round (never reused the next round) and each agent's last spot. */
+  private lastAttackArea = '';
+  private lastSpot = new Map<number, string>();
   protected prevUse = new Map<number, boolean>();
 
   constructor(cfg: MatchConfig) {
@@ -145,7 +150,25 @@ export class Match implements SimContext, MatchQuery {
   canBuyNow(a: Agent): boolean {
     if (!a.alive) return false;
     const inTime = this.phase === 'freeze' || (this.phase === 'live' && this.time - this.liveStart <= this.rules.buyTime);
-    return inTime && this.world.inBuyZone(a.team, a.pos.x, a.pos.z);
+    return inTime && this.inBuyZone(a.team, a.pos.x, a.pos.z);
+  }
+  /** Inside one of the team's spawn areas in use this round. */
+  inBuyZone(team: Team, x: number, z: number): boolean {
+    return this.spawnAreas[team].some((id) => {
+      const area = this.world.map.spawnAreas[team].find((s) => s.id === id);
+      return !!area && inRect(area.zone, x, z);
+    });
+  }
+  /** The nearest spawn spot (either team) far enough from (bx, bz) to be clear of a blast; bots run there. */
+  fleePoint(a: Agent, bx: number, bz: number, clear = 36): Spot {
+    let best: Spot | null = null, bestD = Infinity, far: Spot = { x: a.pos.x, z: a.pos.z }, farD = -1;
+    for (const t of ['T', 'CT'] as const) for (const area of this.world.map.spawnAreas[t]) for (const s of area.spots) {
+      const fromBomb = Math.hypot(s.x - bx, s.z - bz);
+      if (fromBomb > farD) { farD = fromBomb; far = s; }
+      const d = Math.hypot(s.x - a.pos.x, s.z - a.pos.z);
+      if (fromBomb >= clear && d < bestD) { bestD = d; best = s; }
+    }
+    return best ?? far;
   }
   buyTimeLeft(): number {
     if (this.phase === 'freeze') return this.phaseEnd - this.time + this.rules.buyTime;
@@ -428,20 +451,16 @@ export class Match implements SimContext, MatchQuery {
     this.killstreaks.reset();
     this.plantedThisRound = false;
     this.lastRoundEnd = null;
-    const spawns: Record<Team, typeof this.world.map.spawns.T> = {
-      T: this.rng.shuffle([...this.world.map.spawns.T]),
-      CT: this.rng.shuffle([...this.world.map.spawns.CT]),
-    };
-    const idx: Record<Team, number> = { T: 0, CT: 0 };
+    const spawns = this.chooseSpawns();
     for (const a of this.agents) {
       const keep = !first && a.alive && !this.isPistolRound();
       if (a.roundBuys.length) a.lastBuys = a.roundBuys;
       a.roundBuys = [];
       a.resetForRound(keep, DEFAULT_PISTOL[a.team]);
-      const s = spawns[a.team][idx[a.team]++ % spawns[a.team].length];
+      const s = spawns.get(a.id)!;
       a.motor.pos.set(s.x, 0, s.z);
       a.motor.onGround = true;
-      a.yaw = s.yaw ?? 0;
+      a.yaw = s.yaw;
       a.motor.bodyYaw = a.yaw; a.motor.groundY = a.pos.y;
       a.pitch = 0;
     }
@@ -454,6 +473,62 @@ export class Match implements SimContext, MatchQuery {
     }
     for (const b of this.bots.values()) b.resetRound();
     this.events.emit('roundStart', { round: this.round });
+  }
+
+  /**
+   * Where everyone starts this round. Attackers use one of their areas, never the same as last
+   * round; Defenders are split at random between their areas (one per bombsite). Each player gets
+   * a spot they did not have last round, nudged by up to 0.75 m and facing the area's focus point.
+   */
+  private chooseSpawns(): Map<number, { x: number; z: number; yaw: number }> {
+    const map = this.world.map, out = new Map<number, { x: number; z: number; yaw: number }>();
+    const taken: { x: number; z: number }[] = [];
+    const team = (t: Team) => this.agents.filter((a) => a.team === t);
+    const groups: [SpawnArea, Agent[]][] = [];
+    // Attackers: one area for the whole team, a different one from last round.
+    const tAreas = map.spawnAreas.T;
+    const fresh = tAreas.length > 1 ? tAreas.filter((s) => s.id !== this.lastAttackArea) : tAreas;
+    const tArea = this.rng.pick(fresh);
+    this.lastAttackArea = tArea.id;
+    groups.push([tArea, team('T')]);
+    // Defenders: shuffled and split between the bombsite areas (2/3 or 3/2 in a 5v5, a coin flip in a 1v1).
+    const cts = this.rng.shuffle(team('CT')), cAreas = this.rng.shuffle([...map.spawnAreas.CT]);
+    if (cAreas.length === 1) groups.push([cAreas[0], cts]);
+    else if (cAreas.length === 2) {
+      const k = clamp(Math.round(cts.length / 2 + this.rng.range(-0.75, 0.75)), 0, cts.length);
+      groups.push([cAreas[0], cts.slice(0, k)], [cAreas[1], cts.slice(k)]);
+    } else cAreas.forEach((area, i) => groups.push([area, cts.filter((_, j) => j % cAreas.length === i)]));
+    const defending = groups.slice(1).filter(([, g]) => g.length).map(([area]) => area.id);
+    this.spawnAreas = { T: [tArea.id], CT: defending.length ? defending : cAreas.slice(0, 1).map((area) => area.id) };
+
+    for (const [area, agents] of groups) {
+      const spots = this.rng.shuffle([...area.spots]);
+      const key = (s: Spot) => area.id + ':' + s.x + ',' + s.z;
+      for (const a of agents) {
+        // a spot this player did not have last round
+        let i = spots.findIndex((s) => key(s) !== this.lastSpot.get(a.id));
+        if (i < 0) i = 0;
+        const base = spots.length ? spots.splice(i, 1)[0] : this.rng.pick(area.spots);
+        this.lastSpot.set(a.id, key(base));
+        const p = this.nudge(base, area, taken);
+        taken.push(p);
+        const yaw = Math.atan2(-(area.face.x - p.x), -(area.face.z - p.z)) + this.rng.range(-0.3, 0.3);
+        out.set(a.id, { x: p.x, z: p.z, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) });
+      }
+    }
+    return out;
+  }
+
+  /** A random offset of up to 0.75 m that stays in the area, on open floor and clear of the other spawns. */
+  private nudge(s: Spot, area: SpawnArea, taken: { x: number; z: number }[]) {
+    const r = MOVE.radius, col = this.world.collision;
+    const clear = (x: number, z: number) => inRect(area.zone, x, z) && this.world.nav.isWalkableAt(x, z) &&
+      !col.overlaps(x - r, MOVE.stepHeight, z - r, x + r, MOVE.standHeight, z + r) && taken.every((t) => Math.hypot(t.x - x, t.z - z) >= 1.1);
+    for (let k = 0; k < 6; k++) {
+      const x = s.x + this.rng.range(-0.75, 0.75), z = s.z + this.rng.range(-0.75, 0.75);
+      if (clear(x, z)) return { x, z };
+    }
+    return { x: s.x, z: s.z };
   }
 
   private doHalftime() {

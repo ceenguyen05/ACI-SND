@@ -1,8 +1,8 @@
 {
   "name": "aci-snd",
-  "version": "1.7.0",
+  "version": "1.7.5",
   "private": true,
-  "description": "ACI: Search & Destroy - a CS-style tactical shooter on a single office/factory map, built with Three.js",
+  "description": "ACI: Search & Destroy - a CS-style tactical shooter on two office maps (ACI HQ and ACI Building 2), built with Three.js",
   "homepage": "https://ceenguyen05.github.io/ACI-SND/",
   "repository": {
     "type": "git",
@@ -25,7 +25,8 @@
     "screenshots": "node scripts/visual/screenshots.mjs",
     "balance": "node scripts/tools/balance.mjs",
     "map:ascii": "node scripts/tools/print-map.mjs",
-    "verify": "npm run check && npm run check:boot && node scripts/checks/smoke-test.mjs --no-build && node scripts/checks/keys-check.mjs --no-build && node scripts/checks/zombies-check.mjs --no-build && node --import tsx scripts/checks/online-check.mjs --no-build",
+    "verify": "npm run check && npm run check:boot && node scripts/checks/smoke-test.mjs --no-build && node scripts/checks/keys-check.mjs --no-build && node scripts/checks/maps-check.mjs --no-build && node scripts/checks/zombies-check.mjs --no-build && node --import tsx scripts/checks/online-check.mjs --no-build",
+    "test:maps": "node scripts/checks/maps-check.mjs",
     "perf": "node scripts/perf/perf.mjs",
     "test:handling": "node scripts/checks/handling-check.mjs",
     "test:keys": "node scripts/checks/keys-check.mjs",

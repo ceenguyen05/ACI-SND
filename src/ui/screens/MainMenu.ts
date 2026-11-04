@@ -52,7 +52,7 @@ export class TitleScreen {
       logo('title-logo'),
       h('div', { class: 'title-modes' }, h('span', null, 'Search & Destroy'), h('i'), h('span', null, 'Zombies')),
       h('div', { class: 'press-any' }, 'Click or press any key'),
-      h('div', { class: 'title-foot' }, `ACI HQ · Version ${version}`));
+      h('div', { class: 'title-foot' }, `ACI HQ · ACI Building 2 · Version ${version}`));
     window.addEventListener('keydown', go);
   }
 }
@@ -151,7 +151,7 @@ export class MainMenu {
     this.home.append(
       h('div', { class: 'mm-left' },
         logo('mm-logo'),
-        h('div', { class: 'mm-tag' }, 'Tactical shooter · ACI HQ'),
+        h('div', { class: 'mm-tag' }, 'Tactical shooter · 2 maps'),
         h('nav', { class: 'mm-nav' },
           item('01', 'Play Now', 'Offline · Search & Destroy or Zombies', 'play', true),
           item('02', 'Play Online', 'Public queue or private room code', 'online'),
@@ -263,11 +263,12 @@ export class MainMenu {
     const li = (...c: (Node | string)[]) => h('li', null, ...c);
     body.append(h('div', { class: 'help-cols about' },
       h('div', { class: 'card about-hero' }, logo('about-logo'),
-        h('p', null, `${GAME_TITLE} is a browser tactical shooter set in ACI HQ — a single-story headquarters with offices to the west and a manufacturing plant to the east.`),
+        h('p', null, `${GAME_TITLE} is a browser tactical shooter set at ACI: the HQ, with offices to the west and a manufacturing plant to the east, and Building 2, the company's engineering office.`),
         h('div', { class: 'stat-row', style: 'margin-top:10px' },
-          ...[[GAME_VERSION, 'Version'], ['2', 'Game modes'], ['23', 'Weapons'], [String(ZOMBIE_ORDER.length), 'Zombie types']].map(([v, l]) => h('div', null, h('b', null, v), h('span', null, l))))),
+          ...[[GAME_VERSION, 'Version'], ['2', 'Game modes'], ['2', 'Maps'], ['23', 'Weapons'], [String(ZOMBIE_ORDER.length), 'Zombie types']].map(([v, l]) => h('div', null, h('b', null, v), h('span', null, l))))),
       h('div', { class: 'card' }, h('h3', null, 'Search & Destroy'), h('ul', null,
         li('CS-style bomb defusal: Attackers plant at A or B, Defenders defuse. One life per round.'),
+        li('Play ACI HQ or ACI Building 2, or let Randomize pick the map.'),
         li('Teams from 1v1 to 5v5 against bots, a full economy, gadgets, killstreaks and the Gunsmith.'),
         li('Tilt-aim, slides, prone, mantling, wallbangs and a final killcam.'))),
       h('div', { class: 'card' }, h('h3', null, 'Zombies'), h('ul', null,

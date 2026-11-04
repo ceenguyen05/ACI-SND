@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { Match } from '../src/sim/mode/Match';
-import { ACI_HQ } from '../src/sim/maps/aciHq';
+import { narrowMapChoice, resolveMapChoice, sndMap, type SndMapChoice, type SndMapId } from '../src/sim/maps/index';
 import { OUTFITS } from '../src/config/cosmetics';
 import { MATCH_LENGTHS, type Team } from '../src/config/rules';
 import { emptyCommand, type AgentCommand } from '../src/sim/entities/Agent';
@@ -38,6 +38,8 @@ export interface Room {
   matchId: string; participants: Participant[]; ranked: boolean; startedAt: number | null; lastFlushAt: number;
   /** Closed after a server error: nobody is charged an abandon. */
   failed?: boolean;
+  /** The S&D map rolled at start. */
+  mapId?: SndMapId;
 }
 const looks = () => ({ T: { ...OUTFITS.find(o => o.team === 'T')!.look }, CT: { ...OUTFITS.find(o => o.team === 'CT')!.look } });
 
@@ -88,13 +90,15 @@ export class LobbyService {
     this.rooms.set(code, r);
     this.join(c, r, name);
   }
-  private join(c: Client, r: Room, name: unknown): boolean {
+  /** `map`: the joiner's own map choice when matchmaking placed them here; it narrows a "random" room. */
+  private join(c: Client, r: Room, name: unknown, map?: SndMapChoice): boolean {
     if (r.match) { this.fail(c, 'That match has already started.'); return false; }
     if (r.players.length >= roomCapacity(r.options)) { this.fail(c, 'That room is full.'); return false; }
     if (r.options.playlist === 'ranked' && !this.rankedReady(c)) return false;
     if (r.options.playlist === 'ranked' && !this.fits(r, c, this.now())) {
       this.fail(c, 'This Ranked room is outside your current skill range. Use Play online for a fair match.'); return false;
     }
+    if (map && r.options.mode !== 'zombies') r.options = { ...r.options, map: narrowMapChoice(r.options.map, map) };
     const t = r.players.filter(p => p.team === 'T').length;
     const ct = r.players.length - t;
     r.players.push({ id: c.id, name: playerName(name), team: r.options.mode === 'zombies' ? 'CT' : t <= ct ? 'T' : 'CT',
@@ -140,7 +144,8 @@ export class LobbyService {
       seed: randomInt(1, 2 ** 30), roster, rules: { teamSize: r.options.teamSize, roundsToWin: length.roundsToWin, halfLength: length.halfLength } };
     const zombiesConfig = r.options.mode === 'zombies' ? { players: r.options.teamSize, difficulty: r.options.zDifficulty ?? 'normal', length: r.options.zLength ?? 'short',
       playerName: '', playerLook: looks(), spectate: true, seed: config.seed, networkRoster: roster, poolIds: Array.from({ length: 36 }, (_, i) => 100 + i) } : undefined;
-    const m = r.match = zombiesConfig ? new ZombiesMatch({ ...zombiesConfig, layout: ACI_HQ_ZOMBIES }) : new Match({ ...config, map: ACI_HQ });
+    const mapId = r.mapId = zombiesConfig ? undefined : resolveMapChoice(r.options.map, n => randomInt(0, n));
+    const m = r.match = zombiesConfig ? new ZombiesMatch({ ...zombiesConfig, layout: ACI_HQ_ZOMBIES }) : new Match({ ...config, map: sndMap(mapId) });
     m.events.onAny((type, payload) => { if (r.events.length < 2048) r.events.push({ type, payload: encode(payload) }); });
     r.startedAt = this.now();
     const snapshot = captureSnapshot(m, true);
@@ -152,7 +157,7 @@ export class LobbyService {
         activityTicks: 0, awards, abandoned: false, rankSettled: false,
         rewards: new MatchRewards(m, c.agentId!, c.account.career, r.matchId, this.now, r.visibility === 'private' ? .5 : 1, a => { awards.push(...a); this.accounts.changed(); }) };
       c.participant = part; r.participants.push(part);
-      c.peer.send({ type: 'started', match: { config, playerId: c.agentId!, snapshot, mode: zombiesConfig ? 'zombies' : 'snd', zombiesConfig, ranked: r.ranked, matchId: r.matchId } });
+      c.peer.send({ type: 'started', match: { config, playerId: c.agentId!, snapshot, mode: zombiesConfig ? 'zombies' : 'snd', zombiesConfig, ranked: r.ranked, matchId: r.matchId, mapId } });
     }
   }
 
@@ -230,7 +235,7 @@ export class LobbyService {
           if (!this.fits(dest, c, now)) continue;
           source.players = source.players.filter(x => x.id !== p.id); c.room = null;
           // join() repeats its own checks; if one ever refuses, keep the player where they were.
-          if (!this.join(c, dest, p.name)) { source.players.push(p); c.room = source; }
+          if (!this.join(c, dest, p.name, source.options.map)) { source.players.push(p); c.room = source; }
         }
         if (!source.players.length) this.rooms.delete(source.code);
         else { if (!source.players.some(p => p.id === source.ownerId)) source.ownerId = source.players[0].id; this.lobby(source); }
@@ -300,7 +305,7 @@ export class LobbyService {
     if (v.type === 'queue') {
       const r = [...this.rooms.values()].find(r => !r.match && r.visibility === 'public' && sameQueue(r.options, options) &&
         r.players.length < roomCapacity(options) && this.fits(r, c, now));
-      if (r) this.join(c, r, v.name); else this.create(c, options, 'public', v.name);
+      if (r) this.join(c, r, v.name, options.map); else this.create(c, options, 'public', v.name);
     } else if (v.visibility === 'public' || v.visibility === 'private') this.create(c, options, v.visibility, v.name);
     else this.fail(c, 'Choose a public or private room.');
   }

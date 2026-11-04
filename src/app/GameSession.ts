@@ -1,7 +1,7 @@
 import { MATCH_LENGTHS, type MatchRules, type Team } from '../config/rules';
 import { MOVE } from '../config/movement';
 import { Match } from '../sim/mode/Match';
-import { ACI_HQ } from '../sim/maps/aciHq';
+import { sndMap, type SndMapId } from '../sim/maps/index';
 import type { Agent } from '../sim/entities/Agent';
 import { MatchView } from '../render/MatchView';
 import type { GameRenderer } from '../render/Renderer';
@@ -41,6 +41,8 @@ export interface SessionOptions {
   /** Zombies debug: start on this wave with these points. */
   startWave?: number;
   startPoints?: number;
+  /** Search & Destroy map (App resolves "Randomize" before the session starts). */
+  mapId?: SndMapId;
   online?: { client: OnlineClient; match: MatchStart };
 }
 
@@ -108,7 +110,7 @@ export class GameSession {
     } else {
       this.zm = null;
       this.match = new Match({
-        map: ACI_HQ, difficulty: mp.difficulty, playerTeam: side, playerName: profile.name, playerLook: profile.looks, seed: opts.seed,
+        map: sndMap(opts.mapId), difficulty: mp.difficulty, playerTeam: side, playerName: profile.name, playerLook: profile.looks, seed: opts.seed,
         rules: { roundsToWin: len.roundsToWin, halfLength: len.halfLength, teamSize: mp.teamSize, freezeTime: mp.freezeTime, friendlyFire: mp.friendlyFire, killstreaks: mp.killstreaks ?? true, ...opts.rules },
       });
     }

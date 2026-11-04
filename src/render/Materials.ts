@@ -97,6 +97,9 @@ export class MaterialLib {
       case 'checker': return this.std(key, TEX.checker(), { rough: 0.4 });
       case 'serverFloor': return this.std(key, TEX.serverFloor(), { rough: 0.6, metal: 0.2 });
       case 'lino': return this.std(key, TEX.lino(), { rough: 0.6 });
+      case 'lvt': return this.std(key, TEX.lvt(), { rough: 0.55 });
+      case 'esd': return this.std(key, TEX.esd(), { rough: 0.6 });
+      case 'porcelain': return this.std(key, TEX.porcelain(), { rough: 0.35 });
       case 'concrete': case 'concreteSite': return this.std(key, scannedSurface('concrete_floor'), { rough: 0.92, color: '#c4c7c7' });
       case 'warehouse': return this.std(key, scannedSurface('concrete_floor'), { rough: 0.82, color: '#d5d5ca' });
       case 'asphalt': case 'asphaltSpawn': return this.std(key, TEX.asphalt(), { rough: 0.95 });
@@ -133,6 +136,12 @@ export class MaterialLib {
         const m = new MeshStandardMaterial({ color: '#9fc6d8', roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.35, side: DoubleSide, vertexColors: true });
         m.depthWrite = false;
         return m;
+      }
+      case 'net': {
+        // Cut-out netting: unlit dark cord, see-through between the knots.
+        const info = TEX.net();
+        this.texWorld.set(key, { w: info.worldW, h: info.worldH });
+        return new MeshBasicMaterial({ map: info.tex, alphaTest: 0.35, side: DoubleSide, color: new Color('#ffffff') });
       }
       case 'window': return this.std(key, null, { color: '#71949c', rough: 0.16, metal: 0.72 });
       case 'foliage': return this.std(key, null, { color: '#3f7a3a', rough: 0.9 });

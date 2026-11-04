@@ -3,7 +3,7 @@ import { MATCH_LENGTHS, TEAM_NAMES, type MatchLength, type Team } from '../../co
 import { ZDIFF, ZLENGTHS, ZOMBIE_ORDER, type ZDifficulty, type ZLength } from '../../config/zombies';
 import type { Profile } from '../../app/Profile';
 import type { GameMode } from '../../app/GameSession';
-import { ACI_HQ } from '../../sim/maps/aciHq';
+import { MAP_CHOICES, SND_MAPS, mapLabel, sndMap } from '../../sim/maps/index';
 import { renderOverview } from '../hud/Radar';
 import { sfx } from '../../audio/Sfx';
 import { h } from '../dom';
@@ -28,6 +28,7 @@ export class ModeSelect {
   private setup: HTMLElement;
   private hover: GameMode = 'snd';
   private picked: GameMode | null = null;
+  private sndArt!: HTMLElement;
 
   constructor(private profile: Profile, private cb: ModeSelectCallbacks, preselect?: GameMode) {
     this.cards = { snd: this.sndCard(), zombies: this.zombiesCard() };
@@ -114,12 +115,41 @@ export class ModeSelect {
   }
 
   private sndCard() {
-    const art = h('div', { class: 'ms-snd-art' }, renderOverview(ACI_HQ, 3));
+    const art = this.sndArt = h('div', { class: 'ms-snd-art' });
+    this.refreshSndArt();
     const st = this.profile.stats;
     return this.card('snd', art, 'Tactical · round based', 'Search & Destroy',
       'Attackers plant the bomb at A or B; Defenders stop them. One life per round — every bullet counts.',
-      ['1v1 up to 5v5 against bots', 'CS economy, gadgets, killstreaks and the Gunsmith', 'Final killcam and clutch moments'],
+      ['1v1 up to 5v5 against bots on ACI HQ or ACI Building 2', 'CS economy, gadgets, killstreaks and the Gunsmith', 'Final killcam and clutch moments'],
       h('div', { class: 'ms-chip' }, `${st.matches} matches · ${st.wins} wins`));
+  }
+
+  /** Card art follows the chosen map (Randomize shows ACI HQ). */
+  private refreshSndArt() {
+    const choice = this.profile.match.map;
+    this.sndArt.replaceChildren(renderOverview(sndMap(choice === 'random' ? 'aci_hq' : choice), 3));
+  }
+
+  /** Map tiles: a mini overview of each map and a Randomize tile. */
+  private mapPicker(onPick: () => void) {
+    const mp = this.profile.match;
+    const wrap = h('div', { class: 'ms-maps', role: 'radiogroup', 'aria-label': 'Map' });
+    const note = h('div', { class: 'ms-note' });
+    const render = () => {
+      note.textContent = MAP_CHOICES.find((c) => c.value === mp.map)?.blurb ?? '';
+      wrap.replaceChildren(...MAP_CHOICES.map((c) => {
+        const art = c.value === 'random'
+          ? h('div', { class: 'ms-map-random' }, renderOverview(SND_MAPS.aci_hq, 1.1), renderOverview(SND_MAPS.aci_b2, 1.1), h('span', null, '?'))
+          : renderOverview(SND_MAPS[c.value], 1.1);
+        return h('button', {
+          class: 'ms-map' + (mp.map === c.value ? ' on' : ''), role: 'radio', 'aria-checked': String(mp.map === c.value), title: c.blurb,
+          onclick: () => { if (mp.map === c.value) return; mp.map = c.value; sfx.ui_click(); render(); onPick(); },
+          onmouseenter: () => sfx.ui_hover(),
+        }, h('div', { class: 'ms-map-art' }, art), h('b', null, c.label));
+      }));
+    };
+    render();
+    return h('div', null, wrap, note);
   }
 
   private zombiesCard() {
@@ -141,6 +171,8 @@ export class ModeSelect {
     const save = () => this.cb.changed();
     const grid = h('div', { class: 'opt-grid' });
     const add = (l: string, c: HTMLElement) => grid.append(...optRow(l, c));
+    const title = h('h3', null, `Search & Destroy · ${mapLabel(mp.map)}`);
+    add('Map', this.mapPicker(() => { title.textContent = `Search & Destroy · ${mapLabel(mp.map)}`; this.refreshSndArt(); save(); }));
     add('Your side', seg<Team | 'auto'>([{ value: 'T', label: TEAM_NAMES.T }, { value: 'CT', label: TEAM_NAMES.CT }, { value: 'auto', label: 'Auto' }], mp.side, (v) => { mp.side = v; save(); }));
     add('Team size', seg([1, 2, 3, 4, 5].map((n) => ({ value: n, label: `${n}v${n}` })), mp.teamSize, (v) => { mp.teamSize = v; save(); }));
     add('Bot difficulty', seg((Object.keys(DIFFICULTY) as BotDifficulty[]).map((d) => ({ value: d, label: DIFFICULTY[d].label })), mp.difficulty, (v) => { mp.difficulty = v; save(); }));
@@ -148,7 +180,7 @@ export class ModeSelect {
     add('Freeze time', seg([5, 10, 15].map((n) => ({ value: n, label: n + 's' })), mp.freezeTime, (v) => { mp.freezeTime = v; save(); }));
     add('Friendly fire', toggle(mp.friendlyFire, (v) => { mp.friendlyFire = v; save(); }));
     add('Killstreaks', toggle(mp.killstreaks ?? true, (v) => { mp.killstreaks = v; save(); }));
-    return h('div', { class: 'card ms-panel' }, h('h3', null, 'Search & Destroy · ACI HQ'), grid, this.start('snd'));
+    return h('div', { class: 'card ms-panel' }, title, grid, this.start('snd'));
   }
 
   private zombiesSetup() {

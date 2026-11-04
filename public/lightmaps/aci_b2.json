@@ -1,0 +1,29 @@
+{
+ "map": "aci_b2",
+ "version": 3,
+ "hash": "fd2cd917",
+ "range": 3,
+ "atlas": {
+  "width": 2048,
+  "height": 384,
+  "file": "aci_b2_atlas.png"
+ },
+ "probes": {
+  "nx": 106,
+  "nz": 76,
+  "ny": 7,
+  "x0": -52.5,
+  "z0": -37.5,
+  "spacing": 1,
+  "levels": [
+   0.3,
+   1.1,
+   1.9,
+   2.8,
+   4.5,
+   6.5,
+   8.5
+  ],
+  "file": "aci_b2_probes.png"
+ }
+}

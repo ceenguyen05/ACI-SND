@@ -69,6 +69,8 @@ export class TeamCoach {
         bot.setOrder(this.routeOrder(route, this.executeAt, bot.agent));
       });
     } else {
+      // A 2-1-2 setup in random order. Defenders spawn split between the sites; some rotate to their
+      // hold at the start of the round (holding only the spawn site measured worse in bot-vs-bot play).
       const zones: ('A' | 'B' | 'mid')[] = m.rng.shuffle(['A', 'B', 'A', 'B', 'mid']);
       const taken = new Set<string>();
       bots.forEach((bot, i) => {

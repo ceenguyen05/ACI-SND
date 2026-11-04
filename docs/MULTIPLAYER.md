@@ -18,6 +18,12 @@ for XP, daily streaks, persistent online profiles, Ranked and fair matchmaking.
 * **Create private match:** creates a room with a unique, randomly generated five-digit
   code. Friends use **Join private match** and enter that code. Codes are invitations,
   not account authentication or passwords.
+* **S&D map:** choose ACI HQ, ACI Building 2 or Randomize. A created room plays its owner's
+  choice; friends joining by code get that map. Public matchmaking puts Randomize players into
+  any compatible room, and a Randomize room adopts the first specific map that joins. Rooms that
+  are still on Randomize roll the map when the match starts; the server sends it in the match
+  start message (protocol version 3), so every client loads the same map. Zombies is always
+  ACI HQ.
 * S&D humans are balanced between two teams; Zombies humans share the survivor squad.
   A full room starts immediately. The owner
   can press **Play now** at any time. Otherwise the room starts **three minutes after

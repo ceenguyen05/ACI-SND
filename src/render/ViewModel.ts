@@ -4,7 +4,8 @@ import {
 } from 'three';
 import { WEAPONS, type WeaponId } from '../config/weapons';
 import type { UtilityId } from '../config/utilities';
-import { damp } from '../core/math';
+import { clamp, damp } from '../core/math';
+import { LandingSpring, MovementCycle } from './MovementMotion';
 import { bombModel, crowbarModel, grenadeModel, weaponModel } from './WeaponModels';
 import { deviceModel } from './GadgetModels';
 import type { GadgetId } from '../config/gadgets';
@@ -29,6 +30,7 @@ export interface ViewModelState {
   defusing: boolean;
   throwPrimed: boolean;
   lateralSpeed: number;
+  forwardSpeed?: number;
   verticalSpeed: number;
   /** Mantle progress 0..1 (0 = not climbing). */
   mantle?: number;
@@ -68,15 +70,17 @@ export class ViewModel {
   private flash: Sprite;
   private flashT = 0;
   private kick = 0; private kickRot = 0;
-  private bobT = 0;
+  private gait = new MovementCycle();
   private swayX = 0; private swayY = 0;
   private adsT = 0;
   private slashT = 1; private slashDir = 1; private stab = false;
   private throwT = 1;
-  private landT = 0;
+  private landing = new LandingSpring();
   private moveT = 0;
   private airT = 0;
   private strafeT = 0;
+  private forwardT = 0;
+  private runT = 0;
   private actionT = 1;
   private suppressed = false;
   private noShells = false;
@@ -267,7 +271,7 @@ export class ViewModel {
   /** Quick melee: crowbar if you carry one, otherwise the knife. */
   onQuickMelee(crowbar: boolean) { this.meleeT = 0; this.meleeKnife.visible = !crowbar; this.meleeBar.visible = crowbar; }
   onThrow() { this.throwT = 0; }
-  onLand() { this.landT = 1; }
+  onLand(hard = false) { this.landing.kick(hard ? 1.6 : 1); }
 
   setAspect(a: number) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }
 
@@ -301,9 +305,15 @@ export class ViewModel {
 
   update(s: ViewModelState) {
     const dt = Math.min(0.05, s.dt);
-    const run = Math.min(1, s.speed / Math.max(1, s.maxSpeed));
-    if (s.onGround) this.bobT += dt * s.speed * 2.9;
-    this.moveT = damp(this.moveT, s.onGround ? run : 0, 12, dt);
+    const forwardSpeed = s.forwardSpeed ?? Math.sqrt(Math.max(0, s.speed ** 2 - s.lateralSpeed ** 2));
+    this.gait.update({ speed: s.speed, forward: forwardSpeed, right: s.lateralSpeed,
+      onGround: s.onGround, crouch: s.crouch, slide: s.slidePose ?? 0, prone: s.prone ?? 0 }, dt);
+    const run = Math.min(1, this.gait.speed / Math.max(1, s.maxSpeed));
+    this.moveT = run * this.gait.grounded;
+    const forward = clamp(forwardSpeed / Math.max(1, s.maxSpeed), -1, 1);
+    this.forwardT = damp(this.forwardT, forward, 10, dt);
+    const canRunPose = !s.busy && !s.ads && !s.reload && s.draw === 1 && !s.planting && !s.defusing && !s.throwPrimed && !s.mantle;
+    this.runT = damp(this.runT, canRunPose ? clamp((this.gait.speed - 2.6) / 3.4, 0, 1) * this.gait.grounded * (1 - s.crouch) * (1 - (s.slidePose ?? 0)) * (1 - (s.prone ?? 0)) : 0, canRunPose ? 10 : 22, dt);
     this.airT = damp(this.airT, s.onGround ? 0 : Math.max(-1, Math.min(1, s.verticalSpeed / 7)), 9, dt);
     this.strafeT = damp(this.strafeT, s.lateralSpeed / Math.max(1, s.maxSpeed), 9, dt);
     // Mouse deltas are per frame: convert to a 60 Hz reference so sway is FPS independent.
@@ -313,7 +323,7 @@ export class ViewModel {
     this.kick = damp(this.kick, 0, 14, dt);
     this.kickRot = damp(this.kickRot, 0, 12, dt);
     this.adsT = damp(this.adsT, s.ads ? 1 : 0, 16, dt);
-    this.landT = damp(this.landT, 0, 8, dt);
+    const landing = this.landing.update(dt);
     this.slashT = Math.min(1, this.slashT + dt / (this.stab ? 0.5 : 0.32));
     this.throwT = Math.min(1, this.throwT + dt / 0.4);
     this.meleeT = Math.min(1, this.meleeT + dt / 0.42);
@@ -349,10 +359,12 @@ export class ViewModel {
     // aim pivot (the gun turning to where the bullets go) instead of a free kick.
     const hip = 1 - this.adsT, loose = 1 - 0.8 * this.adsT;
     const bobAmt = (1 - this.adsT * 0.9) * this.moveT * (1 - slidePose) * (1 - prone * 0.6);
-    p.x += Math.sin(this.bobT) * 0.007 * bobAmt + (this.swayX - this.strafeT * 0.008) * hip;
-    p.y += Math.cos(this.bobT * 2) * 0.004 * bobAmt + (this.swayY - this.landT * 0.025 - s.crouch * 0.006 - this.airT * 0.012) * hip;
-    p.z += this.kick;
+    p.x += Math.sin(this.gait.phase) * 0.007 * bobAmt + (this.swayX - this.strafeT * 0.008) * hip;
+    p.y += Math.cos(this.gait.phase * 2) * 0.004 * bobAmt + (this.swayY - landing - s.crouch * 0.006 - this.airT * 0.012 - this.runT * 0.018) * hip;
+    p.z += this.kick + ((forward - this.forwardT) * 0.022 + this.runT * 0.012) * hip;
     let rx = (this.kickRot + this.airT * 0.035) * hip + this.swayY * 2 * loose, ry = this.swayX * 2 * loose + hip * 0.09, rz = -this.strafeT * 0.025 * hip;
+    rx -= this.runT * 0.055 * hip;
+    rz += this.runT * 0.04 * hip * side;
     p.y -= slidePose * 0.035 * (1 - this.adsT);
     rz += slidePose * 0.08 * (1 - this.adsT) * side;
     // draw animation

@@ -10,7 +10,7 @@ import type { Batcher } from './Materials';
  */
 export function buildSurroundings(b: Batcher, world: World) {
   const { cellSize: cs, originX: ox, originZ: oz, cols, rows } = world.map;
-  const rng = new Random(855);
+  const rng = new Random(world.map.scenerySeed ?? 855);
   const sky = (c: number, r: number) => world.charAt(c, r) !== '#' && world.ceilingAtCell(c, r) === null;
   // For each map edge: is the cell just inside the boundary wall open sky, and where is a point `depth` metres beyond it?
   const edges: { len: number; open: (u: number) => boolean; at: (u: number, depth: number) => [number, number] }[] = [

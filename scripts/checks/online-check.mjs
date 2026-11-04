@@ -38,6 +38,8 @@ async function page(name) {
   await p.keyboard.press('Enter');
   await p.getByRole('button', { name: /Play Online Public queue/ }).click();
   await p.waitForSelector('.online-panel');
+  // The staged firefight below uses ACI HQ coordinates.
+  await p.getByLabel('Online map').selectOption('aci_hq');
   console.log(`Online menu ready: ${name}`);
   return p;
 }

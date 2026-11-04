@@ -225,7 +225,9 @@ export class HUD {
     this.unsub.push(ev.on('roundStart', (e) => {
       const p = me();
       const half = this.match.isPistolRound() ? ' — PISTOL ROUND' : '';
-      this.showCenter(p ? `Round ${e.round}${half} · You are ${TEAM_NAMES[p.team]}` : `Round ${e.round}${half}`, 3);
+      // Spawns move every round: say where this one is.
+      const area = p && this.match.world.map.spawnAreas?.[p.team]?.find((s) => p.pos.x >= s.zone.x0 && p.pos.x <= s.zone.x1 && p.pos.z >= s.zone.z0 && p.pos.z <= s.zone.z1);
+      this.showCenter(p ? `Round ${e.round}${half} · You are ${TEAM_NAMES[p.team]}${area ? ` · ${area.name}` : ''}` : `Round ${e.round}${half}`, 3);
     }));
     this.unsub.push(ev.on('halftime', () => setTimeout(() => this.showCenter('HALFTIME — switching sides', 4), 2500)));
     this.unsub.push(ev.on('roundEnd', (e) => {

@@ -4,7 +4,7 @@ export const U = 0.0254;
 export const MOVE = {
   tickRate: 64,
   knifeSpeed: 250 * U,       // 6.35 m/s – fastest run speed
-  accelerate: 5.5,
+  accelerate: 6.2,          // reach running pace promptly without changing top speed
   airAccelerate: 12,
   friction: 5.2,
   stopSpeed: 80 * U,

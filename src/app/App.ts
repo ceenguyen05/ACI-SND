@@ -1,6 +1,9 @@
 import { CatmullRomCurve3, Group, Vector3 } from 'three';
-import type { World } from '../sim/world/World';
-import type { BakedLighting } from '../render/lighting/BakedLighting';
+import { World } from '../sim/world/World';
+import { loadBakedLighting, type BakedLighting } from '../render/lighting/BakedLighting';
+import type { MapDef } from '../sim/world/MapTypes';
+import { ACI_HQ } from '../sim/maps/aciHq';
+import { isSndMapId, resolveMapChoice, sndMap } from '../sim/maps/index';
 import { GameRenderer } from '../render/Renderer';
 import { CharacterModel } from '../render/CharacterModel';
 import { weaponModel } from '../render/WeaponModels';
@@ -16,7 +19,7 @@ import { GameSession, type GameMode, type SessionOptions } from './GameSession';
 import { Input } from './Input';
 import { loadProfile, saveProfile, type Profile, type Settings } from './Profile';
 
-type Mode = 'title' | 'menu' | 'game';
+type Mode = 'title' | 'menu' | 'game' | 'loading';
 
 /** Top-level state machine: Title → Main menu → Match → back to menu. */
 export class App {
@@ -24,7 +27,11 @@ export class App {
   readonly input: Input;
   readonly profile: Profile;
   private ui: HTMLElement;
+  /** The map the renderer currently shows (menus always use ACI HQ: the showcase stands in its lobby). */
   private world: World;
+  /** Render worlds and baked lighting per map id, kept after first load so switching back is instant. */
+  private worlds = new Map<string, { world: World; baked: BakedLighting | null }>();
+  private loadToken = 0;
   private mode: Mode = 'title';
   private session: GameSession | null = null;
   private menu: MainMenu | null = null;
@@ -53,6 +60,7 @@ export class App {
     this.renderer.baked = baked;
     this.input = new Input(canvas, this.profile.settings.bindings);
     this.world = world;
+    this.worlds.set(world.map.id, { world, baked });
     this.renderer.quality = this.profile.settings.quality;
     this.renderer.loadMap(this.world, this.profile.settings.quality);
     this.applySettings(this.profile.settings);
@@ -80,7 +88,9 @@ export class App {
     const params = new URLSearchParams(location.search);
     if (params.get('autotest')) {
       const mode: GameMode = params.get('mode') === 'zombies' ? 'zombies' : 'snd';
-      this.startGame({ mode, spectate: true, timeScale: Number(params.get('speed') ?? 6), seed: 42, rules: { roundsToWin: 2, halfLength: 1, freezeTime: 2, roundEndDelay: 2 } });
+      // Autotests stay on ACI HQ unless ?map=<id> asks for another map, so runs are reproducible.
+      const mapId = params.get('map');
+      this.startGame({ mode, spectate: true, timeScale: Number(params.get('speed') ?? 6), seed: 42, mapId: isSndMapId(mapId) ? mapId : 'aci_hq', rules: { roundsToWin: 2, halfLength: 1, freezeTime: 2, roundEndDelay: 2 } });
     } else this.showTitle();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -135,7 +145,44 @@ export class App {
     }
   }
 
+  /** The map a session plays on. Zombies is built on ACI HQ; S&D resolves the player's map choice (Randomize rolls here). */
+  private mapFor(opts: SessionOptions): MapDef {
+    if (opts.online) return opts.online.match.mode === 'zombies' ? ACI_HQ : sndMap(opts.online.match.mapId);
+    if (opts.mode === 'zombies') return ACI_HQ;
+    return sndMap(opts.mapId ?? resolveMapChoice(this.profile.match.map));
+  }
+
+  /** Show `map` in the renderer, fetching its baked lighting the first time. */
+  private async useMap(map: MapDef) {
+    if (this.world.map.id === map.id) return;
+    let entry = this.worlds.get(map.id);
+    if (!entry) {
+      const world = new World(map);
+      entry = { world, baked: await loadBakedLighting(world) };
+      this.worlds.set(map.id, entry);
+    }
+    this.world = entry.world;
+    this.renderer.baked = entry.baked;
+    this.renderer.loadMap(entry.world, this.profile.settings.quality);
+  }
+
+  /** Swap maps behind a loading screen, then continue. Runs `then` immediately when the map is already shown. */
+  private withMap(map: MapDef, then: () => void) {
+    const token = ++this.loadToken;
+    if (this.world.map.id === map.id) { then(); return; }
+    this.mode = 'loading';
+    const screen = h('div', { class: 'loading' }, h('div', null, map.name.toUpperCase()), h('div', { style: 'font-size:12px;letter-spacing:.3em;color:#8c96a3' }, 'LOADING MAP'), h('div', { class: 'bar' }, h('i')));
+    this.ui.append(screen);
+    // Two frames so the loading screen paints before the (synchronous) map build.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this.useMap(map).then(() => { screen.remove(); if (token === this.loadToken) then(); })
+        .catch((err) => { screen.remove(); console.error(err); this.showFatal(err); });
+    }));
+  }
+
   startGame(opts: SessionOptions) {
+    const map = this.mapFor(opts);
+    if (!opts.online && opts.mode !== 'zombies') opts = { ...opts, mapId: map.id as SessionOptions['mapId'] };
     this.lastOpts = opts;
     this.setScreen(null);
     this.menu?.dispose();
@@ -143,13 +190,15 @@ export class App {
     this.showcase.visible = false;
     this.showZombie.root.visible = false;
     if (this.showWeapon) { this.renderer.camera.remove(this.showWeapon); this.showWeapon = null; }
-    this.mode = 'game';
     sfx.resume();
-    this.session = new GameSession(this.renderer, this.input, this.profile, this.ui, () => saveProfile(this.profile), (s) => this.applySettings(s), opts);
-    this.session.onExit = () => this.endGame();
-    this.session.onRestart = () => { const o = this.lastOpts; this.endGame(false); this.startGame(o); };
-    (window as unknown as { __aci: unknown }).__aci = { app: this, session: this.session, match: this.session.match };
-    if (!opts.spectate) this.input.requestLock();
+    this.withMap(map, () => {
+      this.mode = 'game';
+      this.session = new GameSession(this.renderer, this.input, this.profile, this.ui, () => saveProfile(this.profile), (s) => this.applySettings(s), opts);
+      this.session.onExit = () => this.endGame();
+      this.session.onRestart = () => { const o = this.lastOpts; this.endGame(false); this.startGame(o); };
+      (window as unknown as { __aci: unknown }).__aci = { app: this, session: this.session, match: this.session.match };
+      if (!opts.spectate) this.input.requestLock();
+    });
   }
 
   private endGame(toMenu = true) {
@@ -157,7 +206,7 @@ export class App {
     this.session = null;
     this.input.exitLock();
     this.renderer.showViewModel = false;
-    if (toMenu) this.showMenu();
+    if (toMenu) this.withMap(ACI_HQ, () => this.showMenu());
   }
 
   private loop(t: number) {

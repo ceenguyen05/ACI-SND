@@ -24,13 +24,15 @@ export function launchBrowser(extra = []) {
 
 /**
  * From the main menu: Play Now → pick the mode card → Start match (or Watch bots).
- * `mode` is 'snd' (Search & Destroy) or 'zombies'.
+ * `mode` is 'snd' (Search & Destroy) or 'zombies'. `map` is the S&D map tile to pick
+ * ('ACI HQ', 'ACI Building 2' or 'Randomize'); checks default to ACI HQ so their camera spots line up.
  */
-export async function startFromMenu(page, mode = 'snd', spectate = false, side = '') {
+export async function startFromMenu(page, mode = 'snd', spectate = false, side = '', map = 'ACI HQ') {
   await page.waitForSelector('.mm-item.primary', { timeout: 60000 });
   await page.click('.mm-item.primary');
   await page.waitForSelector(`.ms-card.${mode}`);
   await page.click(`.ms-card.${mode}`);
+  if (mode === 'snd' && map) await page.click(`.ms-map >> text="${map}"`);
   if (side) await page.click(`.ms-panel .seg >> text=${side}`);
   await page.click(spectate ? '.ms-start >> text=Watch bots' : '.ms-start >> text=Start match');
 }

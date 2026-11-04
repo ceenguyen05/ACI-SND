@@ -44,4 +44,6 @@ export interface MatchQuery extends SimContext {
   isPistolRound(): boolean;
   tryBuy(agent: Agent, item: BuyItem): boolean;
   timeLeft(): number;
+  /** A spawn spot clear of a blast at (bx, bz), nearest to the agent. */
+  fleePoint(agent: Agent, bx: number, bz: number): { x: number; z: number };
 }

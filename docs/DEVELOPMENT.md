@@ -59,7 +59,9 @@ ACI-SND/
 │  │  └─ controls.ts       #   default key bindings
 │  ├─ core/                # engine-agnostic helpers: math, seeded RNG, typed EventBus
 │  ├─ sim/                 # deterministic game simulation (no DOM/WebGL; runs in Node tests)
-│  │  ├─ maps/aciHq.ts     #   the map: grid, doors, props, spawns, sites, AI data
+│  │  ├─ maps/index.ts     #   S&D map pool, map choice (incl. Randomize) helpers
+│  │  ├─ maps/aciHq.ts     #   ACI HQ: grid, doors, props, signs, spawns, sites, AI data
+│  │  ├─ maps/aciB2.ts     #   ACI Building 2 (engineering office)
 │  │  ├─ maps/aciHqZombies.ts # Zombies layout: zones, shutters, wall-buys, machine spots
 │  │  ├─ world/            #   MapDef types; World = colliders + nav + zone queries
 │  │  ├─ physics/          #   AABB collision world (grid + DDA raycast), Source-style motor
@@ -128,7 +130,7 @@ authoritative multiplayer server.
 | `npm run smoke` | Builds, serves, and drives the real game in headless Chromium: title → every menu page → start match → buy menu purchase → quality presets with FPS readout → an accelerated all-bot match until it ends. Fails on any console error and saves screenshots to `screenshots/` |
 | `npm run screenshots` | Visual tour of 16 map locations and 8 view models (`screenshots/tour/`) |
 | `npm run perf` | FPS per graphics preset on your GPU |
-| `npm run bake` | Re-bake the map's lightmaps after changing the map (about 10 s) |
+| `npm run bake` | Re-bake every map's lightmaps after changing a map (about 15 s); `npm run bake -- aci_b2` for one map |
 | `node scripts/visual/arsenal-look.mjs` | Screenshots of the buy menu, new view models, barricades, RPG blast and missile view (`screenshots/arsenal/`) |
 | `node scripts/visual/sights-look.mjs [--spray] [--dpr=1.5]` | Every gun at the hip and aimed at a target, with 3× centre crops marked at the exact screen centre. `--spray` fires real bursts and prints how far the crosshair sits from the last impact (`screenshots/sights/`) |
 | `npm run test:handling` | Real keyboard/mouse movement, jump, crouch, hold-to-prone, release-to-stand, slide/cooldown, automatic fire, reload and ADS checks, plus screenshots and graphics-preset measurements in `screenshots/handling/` |

@@ -1,4 +1,5 @@
-import type { DoorDef, FloorType, MapDef, PropDef } from '../world/MapTypes';
+import type { FloorLine, FloorType, MapDef, PropDef, SignDef } from '../world/MapTypes';
+import { FACE, GridBuilder, P, line, sign } from './grid';
 
 /**
  * ACI HQ — single-story office + manufacturing plant, modelled on a 1981 Richardson, TX
@@ -13,32 +14,12 @@ import type { DoorDef, FloorType, MapDef, PropDef } from '../world/MapTypes';
 
 const COLS = 60, ROWS = 40, CELL = 2, OX = -60, OZ = -40;
 
-class GridBuilder {
-  cells: string[][];
-  doors: DoorDef[] = [];
-  constructor(cols: number, rows: number, fill: string) {
-    this.cells = Array.from({ length: rows }, () => Array.from({ length: cols }, () => fill));
-  }
-  /** Fill inclusive cell rect. */
-  rect(c0: number, r0: number, c1: number, r1: number, ch: string) {
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) this.cells[r][c] = ch;
-    return this;
-  }
-  /** Carve a door opening through a wall; `lintel` = height of the top of the opening. */
-  door(c0: number, r0: number, c1: number, r1: number, ch: string, lintel: number) {
-    this.rect(c0, r0, c1, r1, ch);
-    this.doors.push({ c0, r0, c1, r1, lintel });
-    return this;
-  }
-  rows(): string[] { return this.cells.map((r) => r.join('')); }
-}
-
 const FLOORS: Record<string, FloorType> = {
   o: { name: 'Office', ceiling: 3.4, material: 'carpet', wallMaterial: 'office' },
   B: { name: 'Bombsite B', ceiling: 3.4, material: 'carpetSite', wallMaterial: 'office' },
   c: { name: 'Conference', ceiling: 3.4, material: 'confCarpet', wallMaterial: 'office' },
   l: { name: 'Lobby', ceiling: 6, material: 'marble', wallMaterial: 'lobby' },
-  C: { name: 'CT Spawn', ceiling: 6, material: 'marble', wallMaterial: 'lobby' },
+  C: { name: 'Lobby Centre', ceiling: 6, material: 'marble', wallMaterial: 'lobby' },
   t: { name: 'Hallway', ceiling: 3.4, material: 'tile', wallMaterial: 'office' },
   k: { name: 'Break Room', ceiling: 3.4, material: 'checker', wallMaterial: 'office' },
   s: { name: 'Server Room', ceiling: 3.4, material: 'serverFloor', wallMaterial: 'office' },
@@ -66,7 +47,7 @@ function buildGrid() {
   g.rect(1, 24, 9, 31, 's');                                // server room (B tunnels)
   g.rect(11, 24, 26, 31, 'm');                              // mail room
   g.rect(32, 24, 58, 31, 'w');                              // shipping & receiving
-  g.rect(1, 33, 58, 38, 'y').rect(24, 34, 36, 37, 'T');     // loading yard / T spawn
+  g.rect(1, 33, 58, 38, 'y').rect(24, 35, 36, 38, 'T');     // loading yard / main T spawn (back of the yard)
   // ---- doors -------------------------------------------------------------
   g.door(15, 4, 15, 4, 'c', 2.4);      // bullpen ↔ conf 1
   g.door(20, 4, 20, 4, 'c', 2.4);      // conf 1 ↔ conf 2
@@ -101,9 +82,6 @@ function buildGrid() {
   return g;
 }
 
-const P = (kind: PropDef['kind'], x: number, z: number, w: number, d: number, h: number, extra: Partial<PropDef> = {}): PropDef =>
-  ({ kind, x, z, w, d, h, ...extra });
-
 const PROPS: PropDef[] = [
   // ---- B site: engineering bullpen ---------------------------------------
   P('cubicle', -49, -31, 5, 4.4, 1.4), P('cubicle', -39, -31, 5, 4.4, 1.4),
@@ -114,12 +92,12 @@ const PROPS: PropDef[] = [
   P('copier', -33, -36.5, 1.6, 1, 1.2, { facing: 2 }),
   P('planter', -31, -13.4, 0.8, 0.8, 1.2),
   P('counter', -55, -16, 4, 1.2, 1.0),
-  P('tv', -44, -37.85, 3, 0.15, 1.6, { y: 1.0, solid: false, facing: 2 }),
+  P('tv', -44, -37.9, 3, 0.15, 1.6, { y: 1.0, solid: false, facing: 2 }),
   // ---- conference rooms ----------------------------------------------------
   P('confTable', -24, -33, 1.8, 5, 0.76),
-  P('tv', -24, -37.85, 3, 0.15, 1.7, { y: 0.9, solid: false, facing: 2 }),
+  P('tv', -24, -37.9, 3, 0.15, 1.7, { y: 0.9, solid: false, facing: 2 }),
   P('confTable', -15, -34, 1.6, 4, 0.76),
-  P('whiteboard', -15, -37.85, 2.6, 0.15, 1.3, { y: 0.9, solid: false, facing: 2 }),
+  P('whiteboard', -15, -37.92, 2.6, 0.15, 1.3, { y: 0.9, solid: false, facing: 2 }),
   // ---- lobby / CT spawn ----------------------------------------------------
   P('reception', 8, -27, 6, 1.2, 1.1, { facing: 0 }),
   P('pillar', -6, -27, 1, 1, 6), P('pillar', 12, -33, 1, 1, 6),
@@ -129,11 +107,13 @@ const PROPS: PropDef[] = [
   P('logo', 4, -37.9, 7, 0.1, 2.2, { y: 2.2, solid: false, facing: 2 }),
   P('display', -3, -37.7, 2.4, 0.5, 2.0, { facing: 2 }),
   P('speedSign', -9.93, -27.6, 0.14, 0.9, 1.55, { y: 1.05, solid: false, facing: 1 }),
+  P('display', 11, -37.7, 2.4, 0.5, 2.0, { facing: 2, variant: 'sports' }),
   // ---- north hall -------------------------------------------------------------
   P('vending', -10, -21.4, 1.2, 0.8, 1.9, { facing: 2 }),
   P('copier', -21, -21.5, 1.4, 0.8, 1.2, { facing: 2 }),
   P('cooler', -8, -21.6, 0.5, 0.5, 1.2),
   P('bench', -25, -16.5, 2.5, 0.6, 0.5),
+  P('fireExt', -18.6, -21.92, 0.3, 0.15, 0.7, { y: 0.9, solid: false, facing: 2 }),
   // ---- mid ----------------------------------------------------------------------
   P('partition', -3.2, -13, 1.6, 0.5, 3.4), P('partition', 1.2, -13, 1.6, 0.5, 3.4),
   P('crate', 0.9, 18, 1.2, 1.2, 1.2),
@@ -150,6 +130,8 @@ const PROPS: PropDef[] = [
   P('vending', -36, 5.4, 1.2, 0.8, 1.9, { facing: 0 }), P('vending', -34.5, 5.4, 1.2, 0.8, 1.9, { facing: 0 }),
   P('sofa', -32, -9, 3, 1, 0.8, { facing: 2 }),
   P('pillar', -44, -2, 0.8, 0.8, 3.4),
+  P('trashCan', -57.5, 1.7, 0.5, 0.5, 0.9, { solid: false }), P('trashCan', -57.5, 2.25, 0.5, 0.5, 0.9, { solid: false, variant: 'recycle' }),
+  P('fireExt', -30.08, -6, 0.15, 0.3, 0.7, { y: 0.9, solid: false, facing: 3 }),
   // ---- server room ------------------------------------------------------------------
   P('serverRack', -52, 12, 7, 1, 2.2), P('serverRack', -52, 16, 7, 1, 2.2), P('serverRack', -52, 20, 7, 1, 2.2),
   P('crac', -41.5, 10, 1.4, 1, 2.0),
@@ -186,6 +168,10 @@ const PROPS: PropDef[] = [
   P('forklift', 54, -4, 1.4, 2.6, 2.2, { facing: 2 }),
   P('barrels', 57, -10, 1.6, 1.6, 1.0),
   P('crate', 38, -10.5, 1.4, 1.4, 1.4),
+  // traffic-radar field kit staged in the test floor's south-east corner
+  P('poleMount', 57.3, 4.6, 0.5, 0.5, 4.2, { facing: 3 }),
+  P('lidarTripod', 56.6, 1.2, 0.8, 0.8, 1.6, { facing: 3 }),
+  P('fireExt', 57.92, -8, 0.15, 0.3, 0.7, { y: 0.9, solid: false, facing: 3 }),
   // ---- shipping & receiving -------------------------------------------------------------
   P('rack', 24, 10.2, 10, 1.2, 3.6), P('rack', 54, 10.2, 6, 1.2, 3.6),
   P('pallet', 10, 17, 1.4, 1.4, 1.4), P('pallet', 22, 19, 2.6, 1.4, 1.0), P('pallet', 30, 15.5, 1.4, 2.8, 1.6),
@@ -204,9 +190,57 @@ const PROPS: PropDef[] = [
   P('pallet', 20, 28, 1.4, 1.4, 1.2), P('pallet', -16, 30, 1.4, 1.4, 1.0),
   P('barrels', -55, 28, 1.6, 1.6, 1.0),
   P('lightPole', -20, 37.5, 0.3, 0.3, 6), P('lightPole', 14, 37.5, 0.3, 0.3, 6), P('lightPole', 44, 37.5, 0.3, 0.3, 6),
+  // plate-reader camera watching the yard lane, and a radar speed-feedback sign by the staff parking
+  P('alprCam', -57.7, 26.7, 0.35, 0.35, 3.8, { facing: 1 }),
+  P('speedSignPole', -26, 37.6, 0.4, 0.4, 3.6, { facing: 3 }),
 ];
 
 const g = buildGrid();
+
+const { S, N, E, W } = FACE;
+const sg = sign;
+const YEL = '#e8b818', INK = '#151515';
+
+const SIGNS: SignDef[] = [
+  sg('CONFERENCE 1', -25, 2.9, -21.98, S, 1.8),
+  sg('CONFERENCE 2', -15, 2.9, -21.98, S, 1.8),
+  sg('ENGINEERING · B', -27.98, 2.9, -18, E, 2.6),
+  sg('SERVER ROOM', -46, 2.9, 26.02, S, 2.4, 0.42, '#2a2a2a', '#7ad0ff'),
+  sg('MAIL ROOM', -22, 2.9, 26.02, S, 2.2),
+  sg('MAIN HALL', -1, 3.4, 26.02, S, 2.8),
+  sg('DOCK 1', 15, 4.75, 26.02, S, 2.0, 0.5, YEL, INK),
+  sg('DOCK 2', 35, 4.75, 26.02, S, 2.0, 0.5, YEL, INK),
+  sg('DOCK 3', 51, 4.75, 26.02, S, 2.0, 0.5, YEL, INK),
+  sg('ASSEMBLY · A', 17.98, 3.5, -28, W, 2.6, 0.5, YEL, INK),
+  sg('WAREHOUSE', 1.98, 3.2, -8, W, 2.0, 0.35),
+  sg('BREAK ROOM', -36, 2.9, -12.02, N, 1.8),
+  sg('B SITE', -28.02, 2.9, -31, E, 1.6, 0.38, '#7a1c18', '#ffffff'),
+  sg('A LONG ↑', 54, 5.6, -11.98, S, 2.4, 0.5, YEL, INK),
+  sg('A', 24, 3.2, -37.94, S, 1.7, 2.1, '#a95735', '#ede3d2'),
+  sg('B', -52, 2.2, -37.94, S, 1.2, 1.5, '#3c6476', '#e4e7dc'),
+  sg('02  /  ASSEMBLY', 39, 4.1, -37.93, S, 4.8, 0.55, '#384549', '#d5d7c6'),
+  sg('SAFETY FIRST', 57.93, 2.5, -22, W, 2.4, 0.5, '#d4b25d', '#26302d'),
+  sg('01  /  ENGINEERING', -40, 2.7, -37.93, S, 3.8, 0.42, '#3c6476', '#e4e7dc'),
+  sg('A-CONCEPTS INDUSTRIES', 4, 1.95, -37.94, S, 5, 0.4, '#14181f', '#c8ccd4'),
+  sg('RADAR  ·  LIDAR  ·  SPEED SENSORS', 4, 1.5, -37.94, S, 5, 0.3, '#14181f', '#f0a020'),
+  // Electronics plant signage: ESD-safe assembly, quality certification, made-in-USA production.
+  sg('ESD PROTECTED AREA', 20.02, 3.35, -28, E, 2.4, 0.45, '#f2c230', INK),
+  sg('ESD PROTECTED AREA', 20.02, 3.85, -18, E, 2.4, 0.45, '#f2c230', INK),
+  sg('ISO 9001:2015 CERTIFIED', 57.93, 5.2, -6, W, 4.4, 0.62, '#1f3550', '#f2f2f2'),
+  sg('MADE IN TEXAS  ·  U.S.A.', 28, 5.6, 8.02, S, 5.2, 0.7, '#7a1c18', '#f4f1e6'),
+  sg('RF TEST LAB', 45, 3.55, -8.03, N, 1.8, 0.42, '#384549', '#d5d7c6'),
+];
+
+const ln = line;
+const FLOOR_LINES: FloorLine[] = [
+  // factory walkway & shipping lanes
+  ln(20.5, -6.4, 41, -6.4, 'yellow'), ln(20.5, 0.6, 41, 0.6, 'yellow'),
+  ln(39.6, 6, 39.6, 23.5, 'yellow'), ln(48.4, 6, 48.4, 23.5, 'yellow'),
+  ln(7.6, 6, 7.6, 23.5, 'yellow'), ln(14.4, 6, 14.4, 23.5, 'yellow'),
+  // yard parking bays
+  ...Array.from({ length: 9 }, (_, i) => ln(-54 + i * 3, 31.5, -54 + i * 3, 37.5, 'white')),
+  ...[12, 18, 32, 38, 48, 54].map((x) => ln(x, 26.2, x, 31, 'white')),
+];
 
 export const ACI_HQ: MapDef = {
   id: 'aci_hq',
@@ -219,13 +253,31 @@ export const ACI_HQ: MapDef = {
   props: PROPS,
   yardWallHeight: 4.5,
   facadeHeight: 6,
-  spawns: {
-    T: [-8, -4, 0, 4, 8].flatMap((x) => [{ x, z: 33, yaw: 0 }, { x: x + 2, z: 35.5, yaw: 0 }]),
-    CT: [-6, -3, 0, 3, 6].flatMap((x) => [{ x, z: -32.5, yaw: Math.PI }, { x: x + 1.5, z: -35, yaw: Math.PI }]),
-  },
-  buyZones: {
-    T: { x0: -14, z0: 27, x1: 16, z1: 38 },
-    CT: { x0: -10, z0: -38, x1: 18, z1: -24 },
+  signs: SIGNS,
+  floorLines: FLOOR_LINES,
+  logo: { x: 4, y: 3.3, z: -37.95, rot: S, w: 7, h: 2.2 },
+  scenerySeed: 855,
+  // Attackers start at the back of the yard (centre, staff parking or docks — a different one each
+  // round); Defenders are split between the two bombsites. No Attacker spot can see a Defender spot.
+  spawnAreas: {
+    T: [
+      { id: 'yard', name: 'Yard', zone: { x0: -14, z0: 31, x1: 14, z1: 38 }, face: { x: -1, z: 25 },
+        spots: [...[-10, -6, -2, 2, 6, 10].map((x) => ({ x, z: 36.8 })), ...[-8, -4, 0, 4, 8].map((x) => ({ x, z: 34.4 }))] },
+      { id: 'yard-west', name: 'Staff Parking', zone: { x0: -58, z0: 29, x1: -27, z1: 38 }, face: { x: -38, z: 22 },
+        spots: [{ x: -55.5, z: 36.6 }, { x: -52.5, z: 33.5 }, { x: -46.5, z: 35 }, { x: -40.5, z: 35 }, { x: -34.5, z: 35 }, { x: -29.5, z: 36.6 },
+          { x: -55.5, z: 31.5 }, { x: -49.5, z: 30.4 }, { x: -43.5, z: 30.2 }, { x: -37.5, z: 30.6 }, { x: -31.5, z: 31.5 }] },
+      { id: 'yard-east', name: 'Docks', zone: { x0: 34, z0: 28, x1: 54.4, z1: 38 }, face: { x: 44, z: 24 },
+        spots: [{ x: 36.5, z: 29.8 }, { x: 40.5, z: 31.6 }, { x: 44.5, z: 29.8 }, { x: 48.5, z: 31.6 }, { x: 52.2, z: 29.8 }, { x: 37, z: 36.6 },
+          { x: 41, z: 35.2 }, { x: 45, z: 34.4 }, { x: 49, z: 35.6 }, { x: 52.2, z: 33.6 }, { x: 52.2, z: 36.8 }] },
+    ],
+    CT: [
+      { id: 'a-defence', name: 'A Defence', site: 'A', zone: { x0: 20, z0: -38, x1: 58, z1: -14 }, face: { x: 38, z: -14 },
+        spots: [{ x: 22.5, z: -36.5 }, { x: 24, z: -31 }, { x: 33, z: -36.6 }, { x: 36.5, z: -30.5 }, { x: 40, z: -36.5 },
+          { x: 50.5, z: -36 }, { x: 54.5, z: -33 }, { x: 51.2, z: -22.5 }, { x: 44, z: -19 }, { x: 28, z: -27 }] },
+      { id: 'b-defence', name: 'B Defence', site: 'B', zone: { x0: -58, z0: -38, x1: -30, z1: -12 }, face: { x: -44, z: -12 },
+        spots: [{ x: -55.5, z: -36 }, { x: -55.5, z: -31 }, { x: -55.5, z: -20 }, { x: -44, z: -33.8 }, { x: -44, z: -29.5 }, { x: -44, z: -23 },
+          { x: -33.5, z: -33 }, { x: -33.5, z: -26 }, { x: -33.5, z: -18.5 }, { x: -38.5, z: -36.5 }, { x: -50, z: -36.5 }] },
+    ],
   },
   sites: {
     A: { x0: 30, z0: -34, x1: 50, z1: -20 },
@@ -238,7 +290,7 @@ export const ACI_HQ: MapDef = {
   callouts: [
     { name: 'B Site', rect: { x0: -58, z0: -38, x1: -30, z1: -12 } },
     { name: 'Conference', rect: { x0: -28, z0: -38, x1: -12, z1: -24 } },
-    { name: 'CT Lobby', rect: { x0: -10, z0: -38, x1: 18, z1: -24 } },
+    { name: 'Lobby', rect: { x0: -10, z0: -38, x1: 18, z1: -24 } },
     { name: 'A Site', rect: { x0: 20, z0: -38, x1: 58, z1: -14 } },
     { name: 'B Hall', rect: { x0: -28, z0: -22, x1: -6, z1: -16 } },
     { name: 'Mid', rect: { x0: -4, z0: -24, x1: 2, z1: 26 } },

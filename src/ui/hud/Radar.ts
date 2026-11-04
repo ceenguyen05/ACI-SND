@@ -7,7 +7,8 @@ import { propColliders } from '../../sim/world/World';
 const PPM = 4; // pixels per meter in the overview image
 
 /** Pre-renders a top-down overview of the map (used by the radar and the menu map card). */
-export function renderOverview(map: MapDef, ppm = PPM): HTMLCanvasElement {
+/** Top-down map image. `spawnAreas` tints every team spawn area (map thumbnails); the live radar draws only this round's. */
+export function renderOverview(map: MapDef, ppm = PPM, spawnAreas = true): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = map.cols * map.cellSize * ppm;
   c.height = map.rows * map.cellSize * ppm;
@@ -38,10 +39,11 @@ export function renderOverview(map: MapDef, ppm = PPM): HTMLCanvasElement {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(site, ((s.x0 + s.x1) / 2 - map.originX) * ppm, ((s.z0 + s.z1) / 2 - map.originZ) * ppm);
   }
-  for (const [team, color] of [['T', 'rgba(232,176,74,0.25)'], ['CT', 'rgba(93,155,232,0.25)']] as const) {
-    const z = map.buyZones[team];
-    g.fillStyle = color;
-    g.fillRect((z.x0 - map.originX) * ppm, (z.z0 - map.originZ) * ppm, (z.x1 - z.x0) * ppm, (z.z1 - z.z0) * ppm);
+  if (spawnAreas) for (const [team, color] of [['T', 'rgba(232,176,74,0.22)'], ['CT', 'rgba(93,155,232,0.22)']] as const) {
+    for (const { zone: z } of map.spawnAreas[team]) {
+      g.fillStyle = color;
+      g.fillRect((z.x0 - map.originX) * ppm, (z.z0 - map.originZ) * ppm, (z.x1 - z.x0) * ppm, (z.z1 - z.z0) * ppm);
+    }
   }
   return c;
 }
@@ -59,7 +61,7 @@ export class Radar {
     this.canvas.width = 400; this.canvas.height = 400;
     this.el.append(this.canvas);
     this.g = this.canvas.getContext('2d')!;
-    this.overview = renderOverview(match.world.map);
+    this.overview = renderOverview(match.world.map, PPM, false);
   }
 
   draw(viewer: Agent | null, team: Team | null, yaw: number, rotate: boolean, zoom: number) {
@@ -87,6 +89,16 @@ export class Radar {
       const [px, pz] = P(b.pos.x, b.pos.z);
       const blink = b.state === 'planted' ? (Math.floor(now * 4) % 2 === 0 ? '#ff3030' : '#ff9030') : '#ff9030';
       g.fillStyle = blink; g.fillRect(px - 5 / scale * 2, pz - 4 / scale * 2, 10 / scale * 2, 8 / scale * 2);
+    }
+    // this round's spawn / buy zones for the viewer's team (while buying is still possible)
+    if (team && (m.phase === 'freeze' || (m.phase === 'live' && m.buyTimeLeft() > 0))) {
+      for (const id of m.spawnAreas[team] ?? []) {
+        const area = map.spawnAreas[team].find((s) => s.id === id);
+        if (!area) continue;
+        const [x0, z0] = P(area.zone.x0, area.zone.z0), [x1, z1] = P(area.zone.x1, area.zone.z1);
+        g.fillStyle = team === 'T' ? 'rgba(232,176,74,0.22)' : 'rgba(93,155,232,0.22)';
+        g.fillRect(x0, z0, x1 - x0, z1 - z0);
+      }
     }
     // own team gadgets
     for (const d of m.gadgets.devices) {

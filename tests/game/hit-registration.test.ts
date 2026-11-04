@@ -16,6 +16,8 @@ function stage() {
   collision.add({ minX: -100, maxX: 100, minZ: -100, maxZ: 100, minY: -1, maxY: 0, surface: 'floor' });
   collision.build();
   p.pos.set(0, 0, 0); e.pos.set(0, 0, -10);
+  // Stage facing too: spawn facing varies by round, and prone / leaning hitboxes follow it.
+  for (const a of [p, e]) { a.yaw = 0; a.motor.bodyYaw = 0; }
   return { m, p, e, collision };
 }
 

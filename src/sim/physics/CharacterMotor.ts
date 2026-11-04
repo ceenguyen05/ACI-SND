@@ -85,11 +85,13 @@ const wish = new Vector3();
  */
 export function stepMotor(world: CollisionWorld, s: MotorState, input: MoveInput, dt: number): { landed: boolean; impactSpeed: number; mantled: boolean } {
   const r = MOVE.radius;
+  const entrySpeed = Math.hypot(s.vel.x, s.vel.z);
+  const forwardSpeed = -Math.sin(input.yaw) * s.vel.x - Math.cos(input.yaw) * s.vel.z;
   s.slideCooldown = Math.max(0, s.slideCooldown - dt);
   s.slideTime = Math.max(0, s.slideTime - dt);
-  if (input.frozen || !s.onGround || input.jump || input.prone) s.slideTime = 0;
-  if (input.slide && !s.slideHeld && !input.frozen && !input.jump && !input.prone && s.onGround && !s.mantle && s.prone < 0.05 && s.duck < 0.4 &&
-    s.slideCooldown === 0 && input.forward > 0.3 && Math.hypot(s.vel.x, s.vel.z) >= MOVE.slideMinSpeed) {
+  if (input.frozen || !s.onGround || input.jump || input.prone || input.walk || input.forward < -0.1) s.slideTime = 0;
+  if (input.slide && !s.slideHeld && !input.frozen && !input.jump && !input.prone && !input.walk && s.onGround && !s.mantle && s.prone < 0.05 && s.duck < 0.4 &&
+    s.slideCooldown === 0 && input.forward > 0.3 && entrySpeed >= MOVE.slideMinSpeed && forwardSpeed >= MOVE.slideMinSpeed * 0.65) {
     s.slideTime = MOVE.slideDuration;
     s.slideCooldown = MOVE.slideDuration + MOVE.slideCooldown;
   }
@@ -142,6 +144,7 @@ export function stepMotor(world: CollisionWorld, s: MotorState, input: MoveInput
   const fx = -Math.sin(input.yaw), fz = -Math.cos(input.yaw);
   const rx = Math.cos(input.yaw), rz = -Math.sin(input.yaw);
   wish.set(fx * input.forward + rx * input.right, 0, fz * input.forward + rz * input.right);
+  const strength = Math.min(1, wish.length());
   let wishSpeed = 0;
   if (wish.lengthSq() > 1e-6 && !input.frozen) {
     wish.normalize();
@@ -149,6 +152,7 @@ export function stepMotor(world: CollisionWorld, s: MotorState, input: MoveInput
     // Blend stance speed over the same interval as the capsule / eye transition.
     wishSpeed *= stanceSpeed(s);
     if (input.walk) wishSpeed = Math.min(wishSpeed, input.maxSpeed * MOVE.walkMult);
+    wishSpeed *= strength;
   } else wish.set(0, 0, 0);
 
   // ---- jump / friction / accelerate --------------------------------------------
@@ -215,7 +219,17 @@ export function stepMotor(world: CollisionWorld, s: MotorState, input: MoveInput
   // Hard speed cap on ground (prevents exceeding weapon max speed when weapon switches).
   if (s.onGround && s.slideTime === 0) {
     const hs = Math.hypot(s.vel.x, s.vel.z);
-    const cap = input.maxSpeed * stanceSpeed(s);
+    const stanceCap = input.maxSpeed * stanceSpeed(s);
+    // Turning must not build speed above a walk / partial-input request. Let existing
+    // momentum brake down to it instead of snapping from running to walking in one tick.
+    const requestedCap = input.walk ? Math.min(stanceCap, input.maxSpeed * MOVE.walkMult) : stanceCap;
+    let cap = Math.min(stanceCap, Math.max(requestedCap * (strength || 1), entrySpeed - MOVE.stopSpeed * MOVE.friction * dt));
+    // The slide's crouch blend outlives its timer. Recover that pose without suddenly
+    // clamping momentum to crouch speed; a low ceiling still enforces the crouched cap.
+    if (s.slidePose > 0 && !input.crouch && !input.prone && !input.walk && !input.frozen &&
+      !world.overlaps(s.pos.x - hull.x, s.pos.y + 0.01, s.pos.z - hull.z, s.pos.x + hull.x, s.pos.y + MOVE.standHeight, s.pos.z + hull.z)) {
+      cap = Math.min(input.maxSpeed, Math.max(cap, entrySpeed - MOVE.slideDeceleration * dt));
+    }
     if (hs > cap && hs > 0) { const k = cap / hs; s.vel.x *= k; s.vel.z *= k; }
   }
 

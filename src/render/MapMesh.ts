@@ -1,11 +1,12 @@
 import {
-  AmbientLight, BackSide, BufferAttribute, BufferGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
+  AmbientLight, BackSide, BoxGeometry, BufferAttribute, BufferGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   PlaneGeometry, PointLight, SphereGeometry, Vector3, type Light,
 } from 'three';
 import type { World } from '../sim/world/World';
+import type { FloorType } from '../sim/world/MapTypes';
 import { Batcher, MaterialLib } from './Materials';
 import { buildProp } from './Props';
-import { TEX, contactShadow, signTexture, siteDecal } from './Textures';
+import { TEX, contactShadow, signCanvas, signTexture, siteDecal } from './Textures';
 import { dressWall } from './Architecture';
 import { MapAnimator } from './MapAnimation';
 import { buildSurroundings } from './Surroundings';
@@ -39,6 +40,25 @@ function quadGeo(p: number[][], n: [number, number, number], uv: number[][], col
   if (lm) g.setAttribute('uv1', new BufferAttribute(lm, 2));
   g.setAttribute('color', new BufferAttribute(c, 3));
   return g;
+}
+
+/**
+ * A solid block of wall (the wall above a doorway) whose texture is anchored to world height like
+ * the wall faces around it, so skirting and wainscot stay at the floor instead of repeating at the lintel.
+ */
+function wallBlock(b: Batcher, lib: MaterialLib, mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) {
+  const ws = lib.worldSize(mat);
+  const g = new BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  const pos = g.getAttribute('position'), nor = g.getAttribute('normal'), uv = g.getAttribute('uv');
+  const col = new Float32Array(pos.count * 3).fill(0.88);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    if (Math.abs(nor.getY(i)) > 0.5) uv.setXY(i, x / ws.w, z / ws.h);
+    else uv.setXY(i, (Math.abs(nor.getX(i)) > 0.5 ? z : x) / ws.w, y / ws.h);
+  }
+  g.setAttribute('color', new BufferAttribute(col, 3));
+  b.addGeometry(mat, g, 0, 0, 0);
 }
 
 const CEIL_MAT = (h: number) => (h <= 4 ? 'ceil:office' : h <= 7 ? 'ceil:lobby' : 'ceil:factory');
@@ -121,10 +141,26 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
   // ---------------------------------------------------------------- door lintels
   for (const d of map.doors) {
     const ceil = world.ceilingAtCell(d.c0, d.r0);
+    const head = world.doorHead(d);
     const ft = map.floorTypes[map.grid[d.r0][d.c0]];
-    if (ceil === null || !ft || ceil <= d.lintel + 0.05) continue;
+    if (ceil === null || !ft || head <= d.lintel + 0.05) continue;
     const x0 = ox + d.c0 * cs, x1 = ox + (d.c1 + 1) * cs, z0 = oz + d.r0 * cs, z1 = oz + (d.r1 + 1) * cs;
-    statics.box('wall:' + ft.wallMaterial, x1 - x0, ceil - d.lintel, z1 - z0, (x0 + x1) / 2, d.lintel, (z0 + z1) / 2, 0, false);
+    const top = Math.min(head, ceil);
+    if (top > d.lintel + 0.05) wallBlock(statics, lib, 'wall:' + ft.wallMaterial, x0, x1, d.lintel, top, z0, z1);
+    if (head > ceil + 0.05) {
+      // Wall above the doorway's own ceiling, up to the flanking walls (World.doorHead): a door into a taller room or out
+      // through the façade leaves no hole. It is only seen from the taller side, so it takes that side's wall finish.
+      let tallest: FloorType | null = null, tallestH = -1;
+      for (let r = d.r0; r <= d.r1; r++) for (let c = d.c0; c <= d.c1; c++) for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const cc = c + dc, rr = r + dr;
+        if (cc >= d.c0 && cc <= d.c1 && rr >= d.r0 && rr <= d.r1) continue;
+        const f = map.floorTypes[world.charAt(cc, rr)];
+        const fh = f ? f.ceiling ?? Infinity : -1;
+        if (f && fh > tallestH) { tallest = f; tallestH = fh; }
+      }
+      const pad = 0.015; // hides the coplanar edge of the doorway's roof slab inside the block
+      wallBlock(statics, lib, 'wall:' + (tallest?.wallMaterial ?? ft.wallMaterial), x0 - pad, x1 + pad, ceil, head, z0 - pad, z1 + pad);
+    }
     statics.box('m:#5a5e64', x1 - x0, 0.06, z1 - z0 + 0.04, (x0 + x1) / 2, d.lintel - 0.03, (z0 + z1) / 2, 0, false);
     // which way the opening spans: multi-cell doors by their extent; single cells by their walls
     // (walls north + south of the cell → you walk east-west through it → the opening spans Z)
@@ -247,64 +283,35 @@ export function buildMapVisual(world: World, lib: MaterialLib, opts: { shadows: 
       group.add(floorUV1(m));
     }
   }
-  const yellow = decalMat('#e8b818'), white = decalMat('#e8e8e8');
-  const line = (mat: MeshBasicMaterial, x0: number, z0: number, x1: number, z1: number, wdt = 0.12) => {
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    const m = new Mesh(new PlaneGeometry(len, wdt), mat);
+  const lineMats = { yellow: decalMat('#e8b818'), white: decalMat('#e8e8e8'), blue: decalMat('#2f68c8') };
+  for (const l of map.floorLines) {
+    const len = Math.hypot(l.x1 - l.x0, l.z1 - l.z0);
+    const m = new Mesh(new PlaneGeometry(len, l.width ?? 0.12), lineMats[l.color]);
     m.rotation.x = -Math.PI / 2;
-    m.rotation.z = -Math.atan2(z1 - z0, x1 - x0);
-    m.position.set((x0 + x1) / 2, 0.01, (z0 + z1) / 2);
+    m.rotation.z = -Math.atan2(l.z1 - l.z0, l.x1 - l.x0);
+    m.position.set((l.x0 + l.x1) / 2, 0.01, (l.z0 + l.z1) / 2);
     group.add(floorUV1(m));
-  };
-  // factory walkway & shipping lanes
-  line(yellow, 20.5, -6.4, 41, -6.4); line(yellow, 20.5, 0.6, 41, 0.6);
-  line(yellow, 39.6, 6, 39.6, 23.5); line(yellow, 48.4, 6, 48.4, 23.5);
-  line(yellow, 7.6, 6, 7.6, 23.5); line(yellow, 14.4, 6, 14.4, 23.5);
-  // yard parking bays
-  for (let x = -54; x <= -30; x += 3) line(white, x, 31.5, x, 37.5);
-  for (const x of [12, 18, 32, 38, 48, 54]) line(white, x, 26.2, x, 31);
+  }
 
-  // ---------------------------------------------------------------- signs
-  const sign = (text: string, x: number, y: number, z: number, rotY: number, w = 2.2, h = 0.42, bg = '#1d2a3a', fg = '#f2f2f2') => {
-    const m = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: signTexture(text, bg, fg), polygonOffset: true, polygonOffsetFactor: -2 }));
-    m.position.set(x, y, z); m.rotation.y = rotY;
-    if (baked) {
-      const p = baked.probe(x + Math.sin(rotY) * 0.3, y, z + Math.cos(rotY) * 0.3);
-      (m.material as MeshBasicMaterial).color.setRGB(Math.min(1.15, 0.25 + p.r), Math.min(1.15, 0.25 + p.g), Math.min(1.15, 0.25 + p.b));
-    }
-    group.add(m);
+  // ---------------------------------------------------------------- signs (map data; baked probes tint them like the wall they hang on)
+  const probeTint = (m: Mesh, x: number, y: number, z: number, rotY: number) => {
+    if (!baked) return;
+    const p = baked.probe(x + Math.sin(rotY) * 0.3, y, z + Math.cos(rotY) * 0.3);
+    (m.material as MeshBasicMaterial).color.setRGB(Math.min(1.15, 0.25 + p.r), Math.min(1.15, 0.25 + p.g), Math.min(1.15, 0.25 + p.b));
   };
-  const S = 0, N = Math.PI, E = Math.PI / 2, W = -Math.PI / 2;
-  sign('CONFERENCE 1', -25, 2.9, -21.98, S, 1.8);
-  sign('CONFERENCE 2', -15, 2.9, -21.98, S, 1.8);
-  sign('ENGINEERING · B', -27.98, 2.9, -18, E, 2.6);
-  sign('SERVER ROOM', -46, 2.9, 26.02, S, 2.4, 0.42, '#2a2a2a', '#7ad0ff');
-  sign('MAIL ROOM', -22, 2.9, 26.02, S, 2.2);
-  sign('MAIN HALL', -1, 3.4, 26.02, S, 2.8);
-  sign('DOCK 1', 15, 4.75, 26.02, S, 2.0, 0.5, '#e8b818', '#151515');
-  sign('DOCK 2', 35, 4.75, 26.02, S, 2.0, 0.5, '#e8b818', '#151515');
-  sign('DOCK 3', 51, 4.75, 26.02, S, 2.0, 0.5, '#e8b818', '#151515');
-  sign('ASSEMBLY · A', 17.98, 3.5, -28, W, 2.6, 0.5, '#e8b818', '#151515');
-  sign('WAREHOUSE', 1.98, 3.2, -8, W, 2.0, 0.35);
-  sign('BREAK ROOM', -36, 2.9, -12.02, N, 1.8);
-  sign('B SITE', -28.02, 2.9, -31, E, 1.6, 0.38, '#7a1c18', '#ffffff');
-  sign('A LONG ↑', 54, 5.6, -11.98, S, 2.4, 0.5, '#e8b818', '#151515');
-  sign('A', 24, 3.2, -37.94, S, 1.7, 2.1, '#a95735', '#ede3d2');
-  sign('B', -52, 2.2, -37.94, S, 1.2, 1.5, '#3c6476', '#e4e7dc');
-  sign('02  /  ASSEMBLY', 39, 4.1, -37.93, S, 4.8, 0.55, '#384549', '#d5d7c6');
-  sign('SAFETY FIRST', 57.93, 2.5, -22, W, 2.4, 0.5, '#d4b25d', '#26302d');
-  sign('01  /  ENGINEERING', -40, 2.7, -37.93, S, 3.8, 0.42, '#3c6476', '#e4e7dc');
-  const logo = new Mesh(new PlaneGeometry(7, 2.2), new MeshBasicMaterial({ map: signTexture('ACI', '#14181f', '#f0a020', 512, 160) }));
-  logo.position.set(4, 3.3, -37.88);
-  group.add(logo);
-  sign('A-CONCEPTS INDUSTRIES', 4, 1.95, -37.87, S, 5, 0.4, '#14181f', '#c8ccd4');
-  sign('RADAR  ·  LIDAR  ·  SPEED SENSORS', 4, 1.5, -37.87, S, 5, 0.3, '#14181f', '#f0a020');
-  // Electronics plant signage: ESD-safe assembly, quality certification, made-in-USA production.
-  sign('ESD PROTECTED AREA', 20.02, 3.35, -28, E, 2.4, 0.45, '#f2c230', '#151515');
-  sign('ESD PROTECTED AREA', 20.02, 3.85, -18, E, 2.4, 0.45, '#f2c230', '#151515');
-  sign('ISO 9001:2015 CERTIFIED', 57.93, 5.2, -6, W, 4.4, 0.62, '#1f3550', '#f2f2f2');
-  sign('MADE IN TEXAS  ·  U.S.A.', 28, 5.6, 8.02, S, 5.2, 0.7, '#7a1c18', '#f4f1e6');
-  sign('RF TEST LAB', 45, 3.55, -8.03, N, 1.8, 0.42, '#384549', '#d5d7c6');
+  for (const s of map.signs) {
+    const m = new Mesh(new PlaneGeometry(s.w ?? 2.2, s.h ?? 0.42), new MeshBasicMaterial({
+      map: signTexture(s.text, s.bg ?? '#1d2a3a', s.fg ?? '#f2f2f2', ...signCanvas(s.w ?? 2.2, s.h ?? 0.42)), polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.position.set(s.x, s.y, s.z); m.rotation.y = s.rot;
+    probeTint(m, s.x, s.y, s.z, s.rot);
+    group.add(m);
+  }
+  if (map.logo) {
+    const L = map.logo;
+    const logo = new Mesh(new PlaneGeometry(L.w, L.h), new MeshBasicMaterial({ map: signTexture('ACI', '#14181f', '#f0a020', 512, 160) }));
+    logo.position.set(L.x, L.y, L.z); logo.rotation.y = L.rot;
+    group.add(logo);
+  }
 
   // ---------------------------------------------------------------- sky dome
   const sky = new Mesh(new SphereGeometry(400, 24, 12), new MeshBasicMaterial({ map: TEX.sky().tex, side: BackSide, depthWrite: false, fog: false }));

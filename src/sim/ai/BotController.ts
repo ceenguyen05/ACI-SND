@@ -440,8 +440,8 @@ export class BotController {
       const need = (a.hasKit ? m.rules.defuseTimeKit : m.rules.defuseTime) * (1 - (a.isDefusing ? a.defuseProgress : 0));
       const cantDefuse = a.team === 'CT' && left < need + (a.isDefusing ? 0 : d / 5.5 + 0.3);
       if (d < 34 && ((a.team === 'T' && left < 7) || cantDefuse)) {
-        const home = m.world.map.spawns[a.team][0];
-        this.moveTo(cmd, home.x, home.z, dt, { tolerance: 2 });
+        const away = m.fleePoint(a, bomb.pos.x, bomb.pos.z);
+        this.moveTo(cmd, away.x, away.z, dt, { tolerance: 2 });
         return;
       }
     }

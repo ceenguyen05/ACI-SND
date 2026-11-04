@@ -3,7 +3,7 @@
 [![CI](https://github.com/ceenguyen05/ACI-Series1/actions/workflows/ci.yml/badge.svg)](https://github.com/ceenguyen05/ACI-Series1/actions/workflows/ci.yml)
 
 **A tactical first-person shooter that runs in your browser.** Plant the bomb, hold the site,
-or survive the horde on one hand-built office-and-factory map. Nothing to download or install.
+or survive the horde across two hand-built maps. Nothing to download or install.
 
 ### ▶ [Play now at aci-series1.vercel.app](https://aci-series1.vercel.app)
 
@@ -11,13 +11,24 @@ Desktop Chrome, Edge or Firefox, with keyboard and mouse.
 
 ---
 
-## The map: ACI HQ
+## The maps
 
-Every match takes place in **ACI HQ**, a single-story building split down the middle. The west
-half is offices: meeting rooms, engineering cubicles and the B-site bullpen. The east half is
-manufacturing: the A-site assembly line, factory floor, warehouse and shipping docks. You get
-close-quarters fights through the cubicles and long sightlines across the factory floor.
-Callouts are in [docs/MAP.md](docs/MAP.md).
+When you start or create a Search & Destroy match, pick **ACI HQ**, **ACI Building 2** or
+**Randomize**. Zombies is played on ACI HQ.
+
+* **ACI HQ** is a single-story building split down the middle. The west half is offices: meeting
+  rooms, engineering cubicles and the B-site bullpen. The east half is manufacturing: the A-site
+  assembly line, factory floor, warehouse and shipping docks. You get close-quarters fights through
+  the cubicles and long sightlines across the factory floor.
+* **ACI Building 2** is the company's engineering office, with no factory floor. Attackers come in
+  from the front parking lot past field-test radar poles and plate-reader cameras. Defenders hold
+  the café (B site) and the prototype lab (A site), either side of a skylit atrium. In between are a
+  lobby with security turnstiles, a party room, restrooms, a training room, a bullpen and an RF lab.
+
+Spawns change every round: Attackers start in a different part of the yard or lot each round, and
+Defenders are split between the A and B sites.
+
+Callouts and routes for both maps are in [docs/MAP.md](docs/MAP.md).
 
 ## Game modes
 
@@ -66,7 +77,7 @@ or bots.
 - Four difficulty levels in both modes
 
 **Online & progression**
-- Public matchmaking and private rooms with five-digit invite codes
+- Public matchmaking and private rooms with five-digit invite codes; pick a map or Randomize
 - Empty slots fill with bots, so a room never sits waiting forever
 - Ranked S&D (3v3 to 5v5) with placements, skill-based queues and Iron to Champion divisions
 - Career XP and levels in both modes, with rewards for daily play
@@ -190,7 +201,7 @@ If the game stutters, lower **Settings → Video → Graphics quality** or **Res
 ## Roadmap
 
 - Rejoining a running online match after a disconnect
-- More maps
+- More maps (and Zombies on ACI Building 2)
 - Destructible soft walls
 - More killstreaks (care package, sentry)
 - Weapon inspect animations

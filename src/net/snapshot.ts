@@ -29,7 +29,7 @@ export function decode(value: WireValue): any {
   }
   return value;
 }
-const STATE_KEYS = ['time', 'tick', 'phase', 'phaseEnd', 'liveStart', 'round', 'score', 'lossStreak', 'history', 'items', 'winner', 'matchOver', 'bomb', 'lastRoundEnd', 'roundDamage'] as const;
+const STATE_KEYS = ['time', 'tick', 'phase', 'phaseEnd', 'liveStart', 'round', 'score', 'lossStreak', 'history', 'items', 'winner', 'matchOver', 'bomb', 'lastRoundEnd', 'roundDamage', 'spawnAreas'] as const;
 export interface MatchSnapshot {
   state: WireValue;
   agents: WireValue[];
