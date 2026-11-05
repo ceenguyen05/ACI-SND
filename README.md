@@ -63,6 +63,8 @@ or bots.
 - Fortify and breach: board up doorways, pry them open, plant and detonate C4
 - Killstreaks: UAV, Counter-UAV, Hunter Drone and a steerable Cruise Missile
 - Pings, a final killcam, and clutch and ACE callouts
+- An optional Minecraft-style paper doll: a live model of your character in the top-right
+  corner that copies your shots, reloads, throws and stance
 
 **Zombies**
 - Ten zombie types, including Spitters, Shriekers, armored Firefighters and a Juggernaut boss

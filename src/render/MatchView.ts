@@ -19,6 +19,7 @@ import { LandingSpring, StairMotion } from './MovementMotion';
 import { ZombieModel } from './ZombieModel';
 import type { GameRenderer } from './Renderer';
 import { bombModel, grenadeModel, weaponModel } from './WeaponModels';
+import type { PaperDollMode } from './PaperDoll';
 
 interface CharEntry {
   model: CharacterModel | ZombieModel; prev: Vector3; cur: Vector3; xray: Group; firing: number; light: Color; hitAt: number; throwAt: number; shadow: Mesh;
@@ -31,7 +32,7 @@ const v3 = (v: Vector3): [number, number, number] => [v.x, v.y, v.z];
 const SHADOW_GEO = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 let shadowMat: MeshBasicMaterial | null = null;
 
-export interface ViewSettings { fov: number; viewmodelFov: number; leftHanded: boolean }
+export interface ViewSettings { fov: number; viewmodelFov: number; leftHanded: boolean; paperDoll?: PaperDollMode; paperDollSize?: number }
 
 /** Convert CS-style horizontal FOV at 4:3 into a vertical FOV. */
 export const verticalFov = (hfov43: number) => 2 * Math.atan(Math.tan((hfov43 * DEG) / 2) * 0.75) / DEG;
@@ -349,6 +350,12 @@ export class MatchView {
     on('knife', (e) => rec({ k: 'knife', agentId: e.agentId, stab: e.stab, hit: e.hit }));
     on('quickMelee', (e) => rec({ k: 'melee', agentId: e.agentId, hit: e.hit }));
     on('throw', (e) => rec({ k: 'throw', agentId: e.agentId }));
+
+    // ---- HUD paper doll (mirrors whoever we look through)
+    const doll = this.r.paperDoll;
+    on('shot', (e) => { if (isView(e.agentId) && !e.pellet) doll.onShot(); });
+    on('hit', (e) => { if (isView(e.victimId)) doll.onHit(); });
+    for (const k of ['throw', 'gadgetDeploy', 'quickMelee', 'knife'] as const) on(k, (e) => { if (isView(e.agentId)) doll.onSwing(); });
   }
 
   // ------------------------------------------------------------------ final killcam
@@ -760,6 +767,7 @@ export class MatchView {
     // camera
     if (kc) { this.aimNdc.set(0, 0); this.frameKillcam(dt, kc, lookDelta); }
     else this.updateCamera(dt, look, lookDelta);
+    this.syncPaperDoll(dt, look, firstPerson && !kc);
     this.pings = this.pings.filter((p) => p.until > now);
     this.r.effects.update(dt, this.r.camera, this.r.height, this.r.camera.fov, kc ? kc.time : now);
     const fwd = this.r.camera.getWorldDirection(new Vector3());
@@ -1050,6 +1058,27 @@ export class MatchView {
     this.r.showViewModel = a.alive;
   }
 
+  /** Feed the HUD paper doll the live pose of the agent we look through (hidden when dead or on a camera feed). */
+  private syncPaperDoll(dt: number, look: { yaw: number; pitch: number }, firstPerson: boolean) {
+    const doll = this.r.paperDoll, s = this.settings();
+    doll.mode = s.paperDoll ?? 'off';
+    doll.scale = s.paperDollSize ?? 1;
+    const a = this.viewAgent;
+    if (doll.mode === 'off' || !a || !firstPerson) { doll.update(dt, null); return; }
+    const now = this.match.time, w = a.activeWeapon(), local = a === this.match.player;
+    const ground = a.motor.onGround ? a.pos.y : this.match.world.collision.groundHeight(a.pos.x, a.pos.z, a.pos.y + 0.3);
+    doll.update(dt, {
+      id: a.id, look: a.look[a.team], held: this.heldKey(a),
+      speed: a.speed2D, maxSpeed: a.maxSpeed(),
+      forward: -a.vel.x * Math.sin(a.yaw) - a.vel.z * Math.cos(a.yaw),
+      right: a.vel.x * Math.cos(a.yaw) - a.vel.z * Math.sin(a.yaw),
+      crouch: a.motor.duck, prone: a.motor.prone, slide: a.motor.slidePose, onGround: a.motor.onGround, lift: Math.max(0, a.pos.y - ground),
+      yaw: local ? look.yaw : a.yaw, pitch: local ? look.pitch : a.pitch, aimYaw: wrapAngle(a.yaw - a.motor.bodyYaw), lean: a.lean,
+      reload: a.wpn.reloadUntil > now && w ? 1 - (a.wpn.reloadUntil - now) / w.def.reloadTime : 0,
+      planting: a.isPlanting || a.isDefusing, ads: a.wpn.ads, mantling: !!a.motor.mantle,
+    });
+  }
+
   smokeDensity(): number { return this.r.effects.smokeDensityAt(this.r.camera.position); }
 
   dispose() {
@@ -1072,5 +1101,6 @@ export class MatchView {
     this.killcam = null;
     this.r.scene.remove(this.root);
     this.r.effects.clear();
+    this.r.paperDoll.reset();
   }
 }

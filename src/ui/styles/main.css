@@ -138,6 +138,8 @@ input, select { font-family: var(--font); }
 .hud-alive i.dead { opacity: .18; }
 .hud-round { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); font-size: 12px; letter-spacing: .2em; color: var(--muted); }
 .killfeed { position: absolute; right: 18px; top: 14px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+/* Paper doll (Settings › Game) is drawn in the top-right corner of the canvas; the kill feed sits to its left. */
+.hud.doll-on .killfeed { right: calc(var(--doll-w, 150px) + 24px); }
 .kf { background: rgba(0,0,0,.55); padding: 4px 10px; font-size: 15px; display: flex; gap: 8px; align-items: center; animation: kfIn .15s; }
 .kf.mine { border: 1px solid #c42; background: rgba(60,0,0,.55); }
 .kf .w { color: #ddd; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }

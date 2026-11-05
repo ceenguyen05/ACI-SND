@@ -54,6 +54,11 @@ export class SettingsPanel {
         add('Rotate radar', toggle(s.rotateRadar, (v) => this.set('rotateRadar', v)));
         add('Radar zoom', slider(0.5, 2, 0.1, s.radarZoom, (v) => this.set('radarZoom', v), (v) => v.toFixed(1) + '×'));
         add('Show FPS', toggle(s.showFps, (v) => this.set('showFps', v)));
+        add('Paper doll', seg([{ value: 'off', label: 'Off' }, { value: 'action', label: 'When acting' }, { value: 'always', label: 'Always' }],
+          s.paperDoll ?? 'off', (v) => this.set('paperDoll', v as Settings['paperDoll'])));
+        grid.append(h('div'), h('div', { class: 'muted', style: 'font-size:12px;line-height:1.5;margin-top:-6px' },
+          'A live model of your character in the top-right corner that copies what you do: shooting, reloading, throwing, melee, crouching, prone, slides, jumps, leans and planting. When acting shows it during those moves and tucks it away 2 seconds later; Always keeps it on screen.'));
+        add('Paper doll size', slider(0.7, 1.5, 0.05, s.paperDollSize ?? 1, (v) => this.set('paperDollSize', v), (v) => Math.round(v * 100) + '%'));
         break;
       case 'audio':
         add('Master volume', slider(0, 1, 0.01, s.masterVolume, (v) => this.set('masterVolume', v), (v) => Math.round(v * 100) + '%'));

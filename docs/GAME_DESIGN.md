@@ -172,6 +172,18 @@ line when aiming, and the front post's tip is exactly on it:
 * **Gameplay tips** (Settings → Game): one short tip per round for the first six rounds,
   covering buying, prone/slide, pings and leaning, killstreaks and mantling, suppressors,
   and quick melee / inspect / weapon light. Tips use your current key bindings.
+* **Paper doll** (Settings → Game, off by default), after Minecraft Bedrock's paper doll and
+  the Java *Paper Doll* mod:
+  * a small live model of your character in the top-right corner, in your outfit and holding
+    your current item;
+  * it copies what you do: shots with recoil and a muzzle flash, reloads, throws, melee and
+    knife swings, flinches, crouch, prone, slides, jumps, leans and planting or defusing;
+  * it swings a little as you turn, and turns side-on when you go prone or slide;
+  * **When acting** shows it during those moves (not plain walking), and after a weapon swap,
+    then tucks it away 2 seconds later. **Always** keeps it on screen;
+  * hidden when you're dead, on a camera or drone feed, or during the killcam. When you
+    spectate a teammate it shows them;
+  * the kill feed moves to its left, and the size slider runs from 70% to 150%.
 
 ## Gunsmith (weapon attachments)
 

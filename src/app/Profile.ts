@@ -6,6 +6,7 @@ import type { WeaponId } from '../config/weapons';
 import type { ZDifficulty, ZLength } from '../config/zombies';
 import { newCareer, restoreCareer, type Career } from '../progression/career';
 import { isMapChoice, type SndMapChoice } from '../sim/maps/index';
+import type { PaperDollMode } from '../render/PaperDoll';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type AimAssist = 'off' | 'low' | 'medium' | 'high';
@@ -42,6 +43,10 @@ export interface Settings {
   objectiveMarkers: boolean;
   /** Short gameplay tips during the first rounds. */
   tips: boolean;
+  /** Minecraft-style paper doll: a live model of your character in the top-right corner. */
+  paperDoll: PaperDollMode;
+  /** Paper doll size (1 = 150 × 186 px). */
+  paperDollSize: number;
   bindings: Record<Action, string>;
   crosshair: CrosshairSettings;
 }
@@ -85,6 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 2.0, zoomSensitivity: 1.0, invertY: false, fov: 90, viewmodelFov: 60, leftHanded: false,
   leanToggle: false, crouchMode: 'hold', adsToggle: false, showFps: true, rotateRadar: true, radarZoom: 1,
   masterVolume: 0.7, sfxVolume: 1, uiVolume: 0.6, renderScale: 1, quality: 'medium', aimAssist: 'low', killcam: true, announcer: true, objectiveMarkers: true, tips: true,
+  paperDoll: 'off', paperDollSize: 1,
   bindings: { ...DEFAULT_BINDINGS }, crosshair: { ...DEFAULT_CROSSHAIR },
 };
 

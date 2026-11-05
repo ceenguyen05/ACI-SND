@@ -137,6 +137,7 @@ authoritative multiplayer server.
 | `npm run test:visual` | High-quality character poses, architecture, weapon animation, WebGL errors and repeated gadget cleanup; screenshots, a motion-review video and a JSON report in `screenshots/visual/` |
 | `npm run test:keys` | Presses the new combat keys in the real game (quick melee, self-stim, killstreak, C4 detonate, cameras, ping, stim dart, weapon light) and checks each one works |
 | `node scripts/visual/qol-look.mjs` | Screenshots of the round tips, Rebuy / Auto-buy, objective markers and the settings page (`screenshots/qol/`) |
+| `node scripts/visual/paperdoll-look.mjs` | The HUD paper doll standing, firing, crouch-reloading, prone and throwing, plus "When acting" hiding it again (top-right close-ups in `screenshots/paperdoll/`) |
 | `node scripts/perf/frame-cost.mjs` | Per-frame CPU cost (simulation, view, HUD, render) per quality preset – unaffected by other load on the machine |
 | `node scripts/visual/gunsmith-look.mjs` | Buys and fits attachments through the real buy menu, then screenshots the Gunsmith tab, a kitted rifle, red-dot / holo / ACOG aiming, an enemy laser and an enemy light (`screenshots/gunsmith/`) |
 | `node scripts/visual/moments-look.mjs` | Screenshots of the new guns, gear, heartbeat screen, pings, stun, multi-kill banner and the killcam, then checks the next round starts (`screenshots/moments/`) |

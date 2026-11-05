@@ -16,6 +16,7 @@ import { weaponIcon } from './WeaponIcons';
 import { announcer } from '../../audio/Announcer';
 import { sfx } from '../../audio/Sfx';
 import type { MatchView } from '../../render/MatchView';
+import { paperDollSize } from '../../render/PaperDoll';
 import { UTILITY_TUNING } from '../../config/utilities';
 import { inRect, rectCenter } from '../../core/math';
 
@@ -70,6 +71,7 @@ export class HUD {
   private centerUntil = 0; private bannerUntil = 0;
   private moneyDeltaUntil = 0;
   private fpsAcc = 0; private fpsFrames = 0;
+  private dollW = -1;
   private unsub: (() => void)[] = [];
   /** Zombies mode: the S&D widgets (score, timer, money, kill feed, bomb markers) are hidden. */
   readonly zombies: boolean;
@@ -306,6 +308,11 @@ export class HUD {
 
     announcer.enabled = s.announcer ?? true;
     announcer.volume = s.masterVolume * 0.9;
+    // the paper doll owns the top-right corner: the kill feed moves to its left
+    const doll = (s.paperDoll ?? 'off') !== 'off';
+    this.el.classList.toggle('doll-on', doll);
+    const dollW = doll ? paperDollSize(s.paperDollSize ?? 1).w : 0;
+    if (dollW !== this.dollW) { this.dollW = dollW; this.el.style.setProperty('--doll-w', dollW + 'px'); }
     // fps
     this.fpsAcc += dt; this.fpsFrames++;
     if (this.fpsAcc > 0.5) { setText(this.fps, s.showFps ? `${Math.round(this.fpsFrames / this.fpsAcc)} FPS` : ''); this.fpsAcc = 0; this.fpsFrames = 0; }

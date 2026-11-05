@@ -7,6 +7,7 @@ import { MaterialLib } from './Materials';
 import { setMaxAnisotropy } from './Textures';
 import { ViewModel } from './ViewModel';
 import { SpatialPost } from './SpatialPost';
+import { PaperDoll } from './PaperDoll';
 import type { BakedLighting } from './lighting/BakedLighting';
 
 /** Owns the WebGL renderer, the world scene/camera and the first-person view-model pass. */
@@ -17,6 +18,8 @@ export class GameRenderer {
   lib = new MaterialLib();
   readonly viewModel = new ViewModel();
   readonly effects = new Effects();
+  /** HUD paper doll in the top-right corner (driven by MatchView, off unless enabled in Settings). */
+  readonly paperDoll = new PaperDoll();
   map: MapVisual | null = null;
   /** Offline-baked lightmaps + probes (null → real-time lighting fallback). */
   baked: BakedLighting | null = null;
@@ -43,6 +46,8 @@ export class GameRenderer {
     this.scene.environmentIntensity = 0.32;
     this.viewModel.scene.environment = env.texture;
     this.viewModel.scene.environmentIntensity = 0.85;
+    this.paperDoll.scene.environment = env.texture;
+    this.paperDoll.scene.environmentIntensity = 0.6;
     room.dispose(); generator.dispose();
     this.scene.fog = new Fog(0x9baab5, 65, 220);
     this.scene.add(this.camera);
@@ -115,5 +120,6 @@ export class GameRenderer {
       r.clearDepth();
       r.render(this.viewModel.scene, this.viewModel.camera);
     }
+    this.paperDoll.render(r);
   }
 }
